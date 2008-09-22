@@ -1,6 +1,7 @@
 require 'external/chunkable'
 require 'stringio'
 require 'tempfile'
+require 'fileutils'
 
 module External
   # Position gets IO objects to work properly for large files.  Additionally, 
@@ -342,6 +343,15 @@ require 'Win32API'
 
 module External
   module IO
+  
+    def self.extended(base) # :nodoc:
+      base.instance_variable_set("@generic_mode", mode(base))
+      base.reset_length
+      base.default_blksize = 1024
+      base.binmode
+      base.instance_variable_set("@pos", nil)
+    end
+    
     # Modfied to properly determine file lengths on Windows. Uses code
     # from 'win32/file/stat' (http://rubyforge.org/projects/win32utils/)
     def self.file_length(io) # :nodoc:

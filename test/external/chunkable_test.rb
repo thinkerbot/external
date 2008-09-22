@@ -3,7 +3,6 @@ require 'external/chunkable'
 require 'pp'
 
 class ChunkableTest < Test::Unit::TestCase
-  include Benchmark
   include External::Chunkable
   
   def setup

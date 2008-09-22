@@ -1,4 +1,4 @@
-require File.join(File.dirname(__FILE__), 'ext_ind_test.rb') 
+require File.expand_path("#{File.dirname(__FILE__)}/ext_ind_test.rb") 
 
 class CachedExtIndTest < ExtIndTest
   class CachedExtInd < ExtInd

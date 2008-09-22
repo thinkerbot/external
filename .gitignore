@@ -3,3 +3,4 @@ pkg/
 rdoc/
 backup/
 rubyspec/
+!test/rubyspec

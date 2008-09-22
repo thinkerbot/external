@@ -42,6 +42,7 @@ class ExtArc < External::Base
   def initialize(io=nil, options={})
     super(io)
     
+    @_index = nil
     index_options = {
       :format => 'II', 
       :nil_value => [0,0], 
@@ -150,7 +151,7 @@ class ExtArc < External::Base
         
         # allow a blockfor monitoring
         yield if block_given?
-        scanner.restsize
+        scanner.rest_size
       end
     end
   end
@@ -214,7 +215,7 @@ class ExtArc < External::Base
         
         # allow a blockfor monitoring
         yield if block_given?
-        scanner.restsize
+        scanner.rest_size
       end
       
       # Unless the io is empty, there will be a remaining entry that 

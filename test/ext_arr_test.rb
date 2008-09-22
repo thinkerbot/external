@@ -3,8 +3,8 @@ require 'ext_arr'
 require 'fileutils'
 
 class ExtArrTest < Test::Unit::TestCase
-  include TestArray
-  
+  acts_as_subset_test
+
   attr_reader :ea, :tempfile
 
   def setup

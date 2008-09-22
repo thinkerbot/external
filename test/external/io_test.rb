@@ -4,6 +4,21 @@ require 'external/io'
 class  IOTest < Test::Unit::TestCase
   include External
   
+  acts_as_subset_test
+  
+  condition(:windows) { match_platform?('mswin') }
+  condition(:non_windows) { match_platform?('non_mswin') }
+  
+  condition(:ruby1_8) do
+    ver = RUBY_VERSION.split(".").collect {|v| v.to_i }
+    ver[0] == 1 && ver[1] == 8
+  end
+  
+  condition(:ruby1_9) do
+    ver = RUBY_VERSION.split(".").collect {|v| v.to_i }
+    ver[0] == 1 && ver[1] == 9
+  end
+  
   def std_class_test(data)
     Tempfile.open("file_test") do |tempfile|
       tempfile << data
@@ -152,7 +167,7 @@ class  IOTest < Test::Unit::TestCase
   end
   
   def test_position_mswin
-    platform_test('mswin') do 
+    condition_test(:windows) do 
       prompt_test(:path_to_large_file) do |path|
         path = $1 if path =~ /^"([^"]*)"$/ 
 
@@ -178,7 +193,7 @@ class  IOTest < Test::Unit::TestCase
   end
   
   def test_position
-    platform_test('non_mswin') do 
+    condition_test(:non_windows) do 
       prompt_test(:path_to_large_file) do |path|
         path = $1 if path =~ /^"([^"]*)"$/ 
 
@@ -291,8 +306,8 @@ class  IOTest < Test::Unit::TestCase
         assert_equal 1, ("abcd" <=> "abc")
         assert_equal 1, (a <=> b)
         
-        assert_equal -1, ("abc" <=> "abcd")
-        assert_equal -1, (b <=> a)
+        assert_equal(-1, ("abc" <=> "abcd"))
+        assert_equal(-1, (b <=> a))
       end
     end
   end
@@ -306,8 +321,8 @@ class  IOTest < Test::Unit::TestCase
         b << "abcz"
         b.extend IO
         
-        assert_equal -1, ("abcd" <=> "abcz")
-        assert_equal -1, (a <=> b)
+        assert_equal(-1, ("abcd" <=> "abcz"))
+        assert_equal(-1, (a <=> b))
         
         assert_equal 1, ("abcz" <=> "abcd")
         assert_equal 1, (b <=> a)
@@ -351,8 +366,8 @@ class  IOTest < Test::Unit::TestCase
       StringIO.open("abcz") do |b|
         b.extend IO
         
-        assert_equal -1, ("abcd" <=> "abcz")
-        assert_equal -1, (a <=> b)
+        assert_equal(-1, ("abcd" <=> "abcz"))
+        assert_equal(-1, (a <=> b))
         
         assert_equal 1, ("abcz" <=> "abcd")
         assert_equal 1, (b <=> a)
@@ -382,9 +397,11 @@ class  IOTest < Test::Unit::TestCase
       classes << io.class
     end
     
-    if pre_ruby19?
+    condition_test(:ruby1_8) do
       assert_equal [File, Tempfile, StringIO], classes
-    else
+    end
+    
+    condition_test(:ruby1_9) do
       assert_equal [File, File, StringIO], classes
     end
   end

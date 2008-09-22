@@ -1,4 +1,5 @@
 $:.unshift File.join(File.dirname(__FILE__), '../lib')
 
-#ENV["ALL"] = 'true'
+# runs all subsets (see Tap::Test::SubsetTest)
+ENV["ALL"] = "true"
 Dir.glob("./**/*_test.rb").each {|test| require test}

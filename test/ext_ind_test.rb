@@ -1,11 +1,12 @@
 require File.join(File.dirname(__FILE__), 'external_test_helper.rb') 
 require 'ext_ind'
 require 'fileutils'
-
 require 'ext_arr'
 
+unless Object.const_defined?(:ExtIndTest)
+
 class ExtIndTest < Test::Unit::TestCase
-  include TestArray
+  acts_as_subset_test
 
   attr_reader :index, :tempfile
 
@@ -1517,4 +1518,6 @@ class ExtIndTest < Test::Unit::TestCase
     assert_raise(ArgumentError) { a[0,1] = b }
   end
   
+end
+
 end
