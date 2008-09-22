@@ -1,0 +1,168 @@
+= External 
+
+Indexing and array-like access to data stored on disk rather than in memory.
+
+== Description
+
+External provides an easy way to index files such that array-like calls can store and
+retrieve entries directly from the file without loading it into memory.  The indexes can 
+be cached for performance or stored on disk alongside the data file, in essence giving you
+arbitrarily large arrays.  
+
+The main classes of external provide array-like access to the following:
+* ExtInd (External Index) -- formatted binary data
+* ExtArr (External Array) -- externally stored ruby objects
+* ExtArc (External Archive) -- externally stored string data
+
+ExtArc is a subclass of ExtArr specialized for string archival files, formats like FASTA
+where entries are strings delimited by '>':
+
+	>Q9BXQ0|Q9BXQ0_HUMAN Tissue transglutaminase (Fragment) - Homo sapiens (Human).
+	LEPFSGKALCSWSIC
+	>P02452|CO1A1_HUMAN Collagen alpha-1(I) chain - Homo sapiens (Human).
+	MFSFVDLRLLLLLAATALLTHGQEEGQVEGQDEDIPPITCVQNGLRYHDRDVWKPEPCRI
+	CVCDNGKVLCDDVICDETKNCPGAEVPEGECCPVCPDGSESPTDQETTGVEGPKGDTGPR
+	GPRGPAGPPGRDGIPGQPGLPGPPGPPGPPGPPGLGGNFAPQLSYGYDEKSTGGISVPGP
+	...
+
+The array-like behavior of these classes is developed against modified versions of the 
+Array tests themselves, and often uses the exact same tests. The idea is to eventually
+duck-type all Array methods, including sort and collect, with acceptable performance.
+
+=== Bugs/Known Issues
+
+* only a limited set of array methods are currently supported
+* reindexing of ExtArr does not work for arrays containing yaml strings
+* yaml serialization/deserialization of some strings do not reproduce identical input
+  and so will not be faithfully store in ExtArr.  Carriage return string are notable:  
+  "\r", "\r\n", "string_with_\r\n_internal", as are chains of newlines: "\n", "\n\n"
+* documentation is poor at the moment
+
+--
+== Performance
+++
+
+== Info 
+
+Copyright (c) 2006-2007, Regents of the University of Colorado.
+Developer:: {Simon Chiang}[http://bahuvrihi.wordpress.com], {Biomolecular Structure Program}[http://biomol.uchsc.edu/], {Hansen Lab}[http://hsc-proteomics.uchsc.edu/hansenlab/] 
+Support:: CU Denver School of Medicine Deans Academic Enrichment Fund
+Licence:: MIT-Style
+
+== Installation
+
+External is available from RubyForge[http://rubyforge.org/projects/external].  Use:
+
+  % gem install external
+
+== Usage
+
+=== ExtArr
+
+ExtArr can be initialized from data using the [] operator and used as an array.
+
+  ea = ExtArr[1, 2.2, "cat", {:key => 'value'}]
+  ea[2]                # => "cat"
+  ea.last              # => {:key => 'value'}
+  ea << [:a, :b]
+  ea.to_a              # => [1, 2.2, "cat", {:key => 'value'}, [:a, :b]]
+
+Behind the scenes, ExtArr serializes and stores entries on a data source (io) and builds an 
+ExtInd that tracks where each entry begins and ends.
+
+  ea.io.class          # => Tempfile
+  ea.io.rewind
+  ea.io.read           # => "--- 1\n--- 2.2\n--- cat\n--- \n:key: value\n--- \n- :a\n- :b\n"
+
+  ea.index.class       # => ExtInd
+  ea.index.to_a        # => [[0, 6], [6, 8], [14, 8], [22, 17], [39, 15]]
+
+By default External supports File, Tempfile, and StringIO data sources.  If no data source is 
+given (as above), the external array is initialized to a Tempfile so that it will be cleaned 
+up on exit.
+
+ExtArr can be initialized from existing data sources.  In this case, ExtArr tries to find and 
+load an existing index; if the index doesn't exist, then you have to reindex the data manually.
+
+  File.open('path/to/file.txt', "w+") do |file|
+    file << "--- 1\n--- 2.2\n--- cat\n--- \n:key: value\n--- \n- :a\n- :b\n"
+    file.flush
+
+    index_filepath = ExtArr.default_index_filepath(file.path)
+    File.exists?(index_filepath)         # => false
+
+    ea = ExtArr.new(file)
+    ea.to_a              # => []
+    ea.reindex 
+    ea.to_a              # => [1, 2.2, "cat", {:key => 'value'}, [:a, :b]]
+  end
+
+ExtArr provides an open method for easy access to file data:
+
+  ExtArr.open('path/to/file.txt') do |ea|
+    # ...
+  end
+
+=== ExtArc
+
+ExtArc is a subclass of ExtArr designed for string archival files.  Rather than serialize and
+load ruby objects to and from the data file, ExtArc simply read and writes strings.  In 
+addition, ExtArc provides additional reindexing methods designed to make reindexing easy.
+
+  arc = ExtArc[">swift", ">brown", ">fox"]
+  arc[2]                # => ">fox"
+  arc.to_a              # => [">swift", ">brown", ">fox"]
+
+  arc.io.class          # => Tempfile
+  arc.io.rewind
+  arc.io.read           # => ">swift>brown>fox"
+
+  File.open('path/to/file.txt', "w+") do |file|
+    file << ">swift>brown>fox"
+    file.flush
+
+    # Reindex by a separation string
+    arc = ExtArc.new(file)
+    arc.to_a                                 # => []
+    arc.reindex_by_sep(:sep_string => ">", :entry_follows_sep => true)
+    arc.to_a                                 # => [">swift", ">brown", ">fox"]
+
+    # Reindex by scanning an entry
+    arc = ExtArc.new(file)
+    arc.to_a                                 # => []
+    arc.reindex_by_scan(/>\w*/)
+    arc.to_a                                 # => [">swift", ">brown", ">fox"]
+  end
+ 
+=== ExtInd
+
+ExtInd provides array-like access to formatted binary data.  The index of ExtArr is an 
+ExtInd constructed to access data formatted as 'II'; two integers corresponding to the 
+start position and length of entries in the ExtArr data source.  For simple, repetitive 
+formats like 'II', processing is optimized to use a general format and frame.
+
+  ea = ExtArr.new
+  ea.index.class        # => ExtInd
+  index = ea.index
+
+  index.format          # => 'I*'
+  index.frame           # => 2
+  index << [1,2]
+  index << [3,4]
+  index.to_a            # => [[1,2],[3,4]]
+
+ExtInd handles arbitrary packing formats, opening many possibilites:
+
+  File.open('path/to/file', "w+") do |file|
+    file << [1,2,3].pack("IQS")
+    file << [4,5,6].pack("IQS")
+    file << [7,8,9].pack("IQS")
+    file.flush
+
+    index = ExtInd.new(file, :format => "IQS")
+    index[1]          # => [4,5,6]
+    index.to_a        # => [[1,2,3],[4,5,6],[7,8,9]]
+  end
+
+Note: at the moment formats must be specified longhand, ie 'III' cannot be written as 'I3',
+and the native size directives for sSiIlL are not supported.

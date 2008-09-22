@@ -1,0 +1,5 @@
+== 0.1.0 / 2007-12-10 revision 23
+
+Initial release with working [] and []= methods
+and several basic array functions for ExtInd, 
+ExtArr, and ExtArc.
