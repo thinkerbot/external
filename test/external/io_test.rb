@@ -4,21 +4,7 @@ require 'external/io'
 class  IOTest < Test::Unit::TestCase
   include External
   
-  acts_as_subset_test
   acts_as_file_test
-  
-  condition(:windows) { match_platform?('mswin') }
-  condition(:non_windows) { match_platform?('non_mswin') }
-  
-  condition(:ruby1_8) do
-    ver = RUBY_VERSION.split(".").collect {|v| v.to_i }
-    ver[0] == 1 && ver[1] == 8
-  end
-  
-  condition(:ruby1_9) do
-    ver = RUBY_VERSION.split(".").collect {|v| v.to_i }
-    ver[0] == 1 && ver[1] == 9
-  end
   
   def io_test(data="")
     path = method_tempfile("file_test") {|tempfile| tempfile << data }
@@ -324,11 +310,11 @@ class  IOTest < Test::Unit::TestCase
       classes << io.class
     end
     
-    condition_test(:ruby1_8) do
+    condition_test(:ruby_1_8) do
       assert_equal [File, Tempfile, StringIO], classes
     end
     
-    condition_test(:ruby1_9) do
+    condition_test(:ruby_1_9) do
       assert_equal [File, File, StringIO], classes
     end
   end

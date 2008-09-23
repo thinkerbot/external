@@ -3,10 +3,6 @@
 # Otherwise it fails with 'TypeError: allocator undefined for Proc'
 
 require 'yaml'
-require 'tempfile'
-require 'fileutils'
-
-require 'external/chunkable'
 require 'external/enumerable'
 require 'external/io'
 
@@ -74,9 +70,9 @@ module External
     
     include External::Chunkable
     
-    # Sets io and extends the input io with External::Position.
+    # Sets io and extends the input io with Io.
     def io=(io)
-      io.extend External::IO unless io.kind_of?(External::IO)
+      io.extend Io unless io.kind_of?(Io)
       @io = io
     end
 

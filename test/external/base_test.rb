@@ -35,13 +35,15 @@ class BaseTest < Test::Unit::TestCase
   #
   
   def test_io_points_to_tempfile_when_io_is_nil
-    begin
-      b = Base.new(nil)
-      assert b.io != nil
-      assert_equal Tempfile, b.io.class
-      assert_equal 0, b.io.path.index(Dir.tmpdir)
-    ensure
-      b.close if b
+    condition_test(:ruby_1_8) do
+      begin
+        b = Base.new(nil)
+        assert b.io != nil
+        assert_equal Tempfile, b.io.class
+        assert_equal 0, b.io.path.index(Dir.tmpdir)
+      ensure
+        b.close if b
+      end
     end
   end
   

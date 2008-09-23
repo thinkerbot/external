@@ -71,10 +71,9 @@ module External
     # See try_handle for more details.
     def length(io)
       case io
-      when External::Io
-        try_handle(io, "length")
+      when Io then try_handle(io, "length")
       else
-        io.extend External::Io
+        io.extend Io
         io.length
       end
     end

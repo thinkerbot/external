@@ -1,9 +1,9 @@
 require 'external/chunkable'
 require 'external/utils'
 
-require 'stringio'
-require 'tempfile'
-require 'fileutils'
+autoload(:StringIO, 'stringio')
+autoload(:Tempfile, 'tempfile')
+autoload(:FileUtils, 'fileutils')
 
 module External
   
@@ -63,9 +63,9 @@ module External
       base.binmode
     end
     
-    # True if self is a File
-    def file?
-      self.kind_of?(File)
+    # Resets length to the length returned by Utils.length
+    def reset_length
+      self.length = Utils.length(self)
     end
 
     # Modified truncate that adjusts length
@@ -75,75 +75,7 @@ module External
       self.length = n
     end
     
-    # Resets length to the length returned by External::IO.length
-
-    # Determines the length of the input io using the _length method
-    # for the input io class.  Non-External::IO inputs are extended 
-    # in this process.
     #
-    # The _length method takes the input io, and should return the 
-    # current length of the input io (ie a flush operation may be 
-    # required). 
-    # 
-    # See try_handle for more details.
-    def reset_length
-      self.length = Utils.length(self)
-    end
-    
-    #
-    # comparison
-    #
-    
-    # Quick comparision with another IO.  Returns true if
-    # another == self, or if both are file-type IOs and 
-    # their paths are equal.
-    def quick_compare(another)
-      self == another || (self.file? && another.file? && self.path == another.path)
-    end
-
-    # Sort compare with another IO, behaving like a comparison between
-    # the full string contents of self and another.  Can be a long 
-    # operation if it requires the full read of two large IO objects.
-    def sort_compare(another, blksize=default_blksize)
-      # equal in comparison if the ios are equal
-      return 0 if quick_compare(another)
-      
-      self.flush
-      self.reset_length
-      
-      another.flush
-      another.reset_length
-      
-      if another.length > self.length
-        return -1
-      elsif self.length < another.length
-        return 1
-      else
-        self.pos = 0
-        another.pos = 0
-
-        sa = sb = nil
-        while sa == sb
-          sa = self.read(blksize)
-          sb = another.read(blksize)
-          break if sa.nil? || sb.nil?
-        end
-
-        sa.to_s <=> sb.to_s
-      end
-    end
-    
-    # Sort compare with another IO, behaving like a comparison between
-    # the full string contents of self and another.  Can be a long 
-    # operation if it requires the full read of two large IO objects.
-    def <=>(another)
-      sort_compare(another)
-    end
-    
-    #
-    # reading
-    #
-    
     def scan(range_or_span=default_span, blksize=default_blksize, carryover_limit=default_blksize)
       carryover = 0
       chunk(range_or_span, blksize) do |offset, length|
@@ -156,10 +88,6 @@ module External
       end
       carryover
     end
-    
-    #
-    # writing
-    #
     
     # 
     def insert(src, range=0..src.length, pos=nil)
@@ -214,5 +142,50 @@ module External
       end
     end
     
+    # Quick comparision with another IO.  Returns true if
+    # another == self, or if both are file-type IOs and 
+    # their paths are equal.
+    def quick_compare(another)
+      self == another || (self.kind_of?(File) && another.kind_of?(File) && self.path == another.path)
+    end
+
+    # Sort compare with another IO, behaving like a comparison between
+    # the full string contents of self and another.  Can be a long 
+    # operation if it requires the full read of two large IO objects.
+    def sort_compare(another, blksize=default_blksize)
+      # equal in comparison if the ios are equal
+      return 0 if quick_compare(another)
+      
+      self.flush
+      self.reset_length
+      
+      another.flush
+      another.reset_length
+      
+      if another.length > self.length
+        return -1
+      elsif self.length < another.length
+        return 1
+      else
+        self.pos = 0
+        another.pos = 0
+
+        sa = sb = nil
+        while sa == sb
+          sa = self.read(blksize)
+          sb = another.read(blksize)
+          break if sa.nil? || sb.nil?
+        end
+
+        sa.to_s <=> sb.to_s
+      end
+    end
+    
+    # Sort compare with another IO, behaving like a comparison between
+    # the full string contents of self and another.  Can be a long 
+    # operation if it requires the full read of two large IO objects.
+    def <=>(another)
+      sort_compare(another)
+    end
   end
 end
