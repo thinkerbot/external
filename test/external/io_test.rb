@@ -5,6 +5,7 @@ class  IOTest < Test::Unit::TestCase
   include External
   
   acts_as_subset_test
+  acts_as_file_test
   
   condition(:windows) { match_platform?('mswin') }
   condition(:non_windows) { match_platform?('non_mswin') }
@@ -19,33 +20,24 @@ class  IOTest < Test::Unit::TestCase
     ver[0] == 1 && ver[1] == 9
   end
   
-  def std_class_test(data)
-    Tempfile.open("file_test") do |tempfile|
-      tempfile << data
-      tempfile.flush
-    
-      File.open(tempfile.path, "r+") do |file|
-        file.extend IO
-        yield(file)
-      end
+  def io_test(data="")
+    path = method_tempfile("file_test") {|tempfile| tempfile << data }
+    File.open(path, "r+") do |file|
+      file.extend Io
+      yield(:file, file)
     end
-    
-    Tempfile.open("tempfile_test") do |tempfile|
-      tempfile << data
-      tempfile.extend IO
 
-      yield(tempfile)
+    Tempfile.open("tempfile_test", method_root[:output]) do |tempfile|
+      tempfile << data
+      tempfile.fsync
+      tempfile.extend Io
+
+      yield(:tempfile, tempfile)
     end
     
-    Tempfile.open("strio_test") do |tempfile|
-      tempfile << data
-      tempfile.flush
-    
-      tempfile.pos = 0
-      StringIO.open(tempfile.read, "r+") do |file|
-        file.extend IO
-        yield(file)
-      end
+    StringIO.open(data, "r+") do |strio|
+      strio.extend Io
+      yield(:strio, strio)
     end
   end
   
@@ -53,63 +45,28 @@ class  IOTest < Test::Unit::TestCase
   # length test
   #
   
-  def test_length_is_set_to_file_size_upon_extend_for_file
-    # File
-    t = Tempfile.new "position_test"
-    t << "abcd"
-    t.close
-    
-    File.open(t.path, "r+") do |file|
-      file.extend IO
-      assert_equal 4, file.length 
-      assert_equal 4, File.size(file.path)
+  def test_length_is_set_to_io_size_upon_extend 
+    io_test "abcde" do |type, io|
+      assert_equal 5, io.length, type
     end
-
-    # Tempfile
-    t = Tempfile.new "position_test"
-    t << "abcd"
-    t.fsync
-    assert_equal 4, File.size(t.path)
-    
-    t.extend IO
-    assert_equal 4, t.length
-
-    t.close
   end
   
-  def test_length_does_NOT_automatically_correspond_to_file_size
-    t = Tempfile.new "position_test"
-    t.close 
-    
-    assert_equal 0, File.size(t.path)
-    File.open(t.path, "r+") do |file|
-      file.extend IO
-    
-      assert_equal 0, file.length
-      assert_equal 0, File.size(t.path)
+  def test_length_does_not_automatically_correspond_to_io_size
+    io_test do |type, io|
+      assert_equal 0, io.length, type
       
-      file << "abcd"
-      file.fsync
+      io << "abcde"
+      io.fsync
       
-      assert_equal 0, file.length
-      assert_equal 4, File.size(t.path)
+      case io
+      when StringIO 
+        assert_equal 5, io.string.size, type
+      else 
+        assert_equal 5, File.size(io.path), type
+      end
+      
+      assert_equal 0, io.length, type
     end
-    
-    
-    # Tempfile
-    t = Tempfile.new "position_test"
-    t.extend IO
-    
-    assert_equal 0, t.length
-    assert_equal 0, File.size(t.path)
-    
-    t << "abcd"
-    t.fsync
-    
-    assert_equal 0, t.length
-    assert_equal 4, File.size(t.path)
-    
-    t.close
   end
   
   #
@@ -117,45 +74,15 @@ class  IOTest < Test::Unit::TestCase
   #
   
   def test_reset_length_resets_length_to_file_size
-    # File
-    t = Tempfile.new "position_test"
-    t.close
+    io_test do |type, io|
+      io << "abcde"
+      io.fsync
+      
+      assert_equal 0, io.length, type
     
-    File.open(t.path, "r+") do |file|
-      file.extend IO
-    
-      assert_equal 0, file.length
-      assert_equal 0, File.size(file.path)
-    
-      file << "abcd"
-      file.fsync
-    
-      assert_equal 0, file.length
-      assert_equal 4, File.size(t.path)
-    
-      file.reset_length
-    
-      assert_equal 4, file.length
+      io.reset_length
+      assert_equal 5, io.length
     end
-    
-    # Tempfile
-    t = Tempfile.new "position_test"
-    t.extend IO
-    
-    assert_equal 0, t.length
-    assert_equal 0, File.size(t.path)
-    
-    t << "abcd"
-    t.fsync
-    
-    assert_equal 0, t.length
-    assert_equal 4, File.size(t.path)
-    
-    t.reset_length
-    
-    assert_equal 4, t.length
-    
-    t.close
   end
 
   #
@@ -170,9 +97,9 @@ class  IOTest < Test::Unit::TestCase
     condition_test(:windows) do 
       prompt_test(:path_to_large_file) do |path|
         path = $1 if path =~ /^"([^"]*)"$/ 
-
+  
         File.open(path) do |file|
-          file.extend IO
+          file.extend Io
           
           # stat.size < 0 due to windows bug
           assert file.stat.size < 0, "File size must be > 2GB (only #{file.length/two_gb_size})"
@@ -196,9 +123,9 @@ class  IOTest < Test::Unit::TestCase
     condition_test(:non_windows) do 
       prompt_test(:path_to_large_file) do |path|
         path = $1 if path =~ /^"([^"]*)"$/ 
-
+  
         File.open(path) do |file|
-          file.extend IO
+          file.extend Io
         
           assert file.length > (two_gb_size + 5), "File size must be > 2GB (only #{file.length/two_gb_size})"
         
@@ -215,52 +142,52 @@ class  IOTest < Test::Unit::TestCase
       end
     end
   end
-
+  
   #
   # generic_mode test
   #
   
-  def test_generic_modes_are_determined_correctly
-    {
-      "r" => "r",
-      "r+" => "r+",
-      "w" => "w",
-      "w+" => "r+",
-      "a" => "w",
-      "a+" => "r+"
-    }.each_pair do |mode, expected|
-      Tempfile.open("position_test") do |t|
-        File.open(t.path, mode) do |file|
-          file.extend IO
-          assert_equal expected, file.generic_mode, mode
-          assert !file.closed?
-        end
-      end
-      
-      StringIO.open("", mode) do |file|
-        file.extend IO
-        assert_equal expected, file.generic_mode, mode
-        assert !file.closed?
-      end
-    end
-  end
+  # def test_generic_modes_are_determined_correctly
+  #   {
+  #     "r" => "r",
+  #     "r+" => "r+",
+  #     "w" => "w",
+  #     "w+" => "r+",
+  #     "a" => "w",
+  #     "a+" => "r+"
+  #   }.each_pair do |mode, expected|
+  #     path = method_tempfile("file_test") {|tempfile| tempfile << '' }
+  #     
+  #     File.open(path, mode) do |file|
+  #       file.extend Io
+  #       assert_equal expected, file.generic_mode, "file #{mode}"
+  #       assert !file.closed?, "file #{mode}"
+  #     end
+  #     
+  #     StringIO.open("", mode) do |file|
+  #       file.extend Io
+  #       assert_equal expected, file.generic_mode, "strio #{mode}"
+  #       assert !file.closed?, "strio #{mode}"
+  #     end
+  #   end
+  # end
   
   #
   # quick_compare test
   #
   
   def test_quick_compare_true_if_another_is_self
-    std_class_test("") do |io|
-      assert io.quick_compare(io)
+    io_test do |type, io|
+      assert io.quick_compare(io), type
     end
   end
   
   def test_quick_compare_true_if_paths_of_self_and_another_are_the_same
     Tempfile.open("a") do |a|
-      a.extend IO
+      a.extend Io
       
       File.open(a.path) do |b|
-        b.extend IO
+        b.extend Io
         
         assert a != b
         assert a.path == b.path
@@ -272,19 +199,19 @@ class  IOTest < Test::Unit::TestCase
   #
   # <=> test
   #
-
+  
   def test_sort_compare_with_self
-    std_class_test("") do |io|
-      assert_equal 0, (io <=> io)
+    io_test do |type, io|
+      assert_equal 0, (io <=> io), type
     end
   end
-
+  
   def test_sort_compare_with_same_file
     Tempfile.open("a") do |a|
-      a.extend IO
+      a.extend Io
       
       File.open(a.path) do |b|
-        b.extend IO
+        b.extend Io
         
         assert a != b
         assert a.path == b.path
@@ -296,11 +223,11 @@ class  IOTest < Test::Unit::TestCase
   def test_sort_compare_with_unequal_lengths
     Tempfile.open("a") do |a|
       a << "abcd"
-      a.extend IO
+      a.extend Io
       
       Tempfile.open("b") do |b|
         b << "abc"
-        b.extend IO
+        b.extend Io
         
         assert !a.quick_compare(b)
         assert_equal 1, ("abcd" <=> "abc")
@@ -315,11 +242,11 @@ class  IOTest < Test::Unit::TestCase
   def test_sort_compare
     Tempfile.open("a") do |a|
       a << "abcd"
-      a.extend IO
+      a.extend Io
       
       Tempfile.open("b") do |b|
         b << "abcz"
-        b.extend IO
+        b.extend Io
         
         assert_equal(-1, ("abcd" <=> "abcz"))
         assert_equal(-1, (a <=> b))
@@ -332,11 +259,11 @@ class  IOTest < Test::Unit::TestCase
   
   def test_sort_compare_same_content
     Tempfile.open("a") do |a|
-      a.extend IO
+      a.extend Io
       a << "abcd"
       
       Tempfile.open("b") do |b|
-        b.extend IO
+        b.extend Io
         b << "abcd"
         
         assert a.path != b.path
@@ -347,11 +274,11 @@ class  IOTest < Test::Unit::TestCase
   
   def test_sort_compare_no_content
     Tempfile.open("a") do |a|
-      a.extend IO
+      a.extend Io
       
       Tempfile.open("b") do |b|
-        b.extend IO
-
+        b.extend Io
+  
         assert a.path != b.path
         assert_equal 0, (a <=> b)
       end
@@ -361,10 +288,10 @@ class  IOTest < Test::Unit::TestCase
   def test_sort_compare_with_different_underlying_io_types
     Tempfile.open("a") do |a|
       a << "abcd"
-      a.extend IO
+      a.extend Io
       
-      StringIO.open("abcz") do |b|
-        b.extend IO
+      StringIO.new("abcz") do |b|
+        b.extend Io
         
         assert_equal(-1, ("abcd" <=> "abcz"))
         assert_equal(-1, (a <=> b))
@@ -374,16 +301,16 @@ class  IOTest < Test::Unit::TestCase
       end
     end
   end
-
+  
   #
   # copy test
   #
   
-  def test_std_class_test
+  def test_io_test
     classes = []
-    std_class_test("some data") do |io|
-      assert io.kind_of?(IO)
-      assert "r+", io.generic_mode
+    io_test("some data") do |type, io|
+      # assert io.kind_of?(Io)
+      # assert "r+", io.generic_mode
       
       io.pos = 0
       assert_equal "some data", io.read
@@ -409,27 +336,27 @@ class  IOTest < Test::Unit::TestCase
   def test_copy_opens_a_copy_in_read_mode
     data = "test data"
     
-    std_class_test(data) do |io|
+    io_test(data) do |type, io|
       copy_path = nil
       io.copy do |copy|
-        assert_equal "r", copy.generic_mode
+        # assert_equal "r", copy.generic_mode
         assert_equal data, copy.read
-
+  
         copy_path =  copy.path
         assert_not_equal io.path, copy_path
       end
-
+  
       assert !copy_path.nil?
       assert !File.exists?(copy_path)
     end
   end
   
-  def test_copy_opens_copy_in_mode_if_provided 
-    std_class_test("") do |io|
-      assert_equal "r+", io.generic_mode
-      io.copy("w") do |copy|
-        assert_equal "w", copy.generic_mode
-      end
-    end
-  end
+  # def test_copy_opens_copy_in_mode_if_provided 
+  #   io_test do |type, io|
+  #     assert_equal "r+", io.generic_mode
+  #     io.copy("w") do |copy|
+  #       assert_equal "w", copy.generic_mode
+  #     end
+  #   end
+  # end
 end

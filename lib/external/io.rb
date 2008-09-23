@@ -1,9 +1,12 @@
 require 'external/chunkable'
+require 'external/utils'
+
 require 'stringio'
 require 'tempfile'
 require 'fileutils'
 
 module External
+  
   # Position gets IO objects to work properly for large files.  Additionally, 
   # IO adds a length accessor for getting the size of the IO contents.  Note
   # that length is not automatically adjusted by write, for performance
@@ -38,165 +41,31 @@ module External
   #
   # I haven't found errors on Fedora and haven't tested on any other platforms.
   # If you find and solve some wierd positioning errors, please let me know. 
-  module IO
+  module Io
+    include Chunkable
     
-    # Determines the generic mode of the input io using the _mode
-    # method for the input io class.  By default IO provides _mode
-    # methods for File, Tempfile, and StringIO.  The return string
-    # is determined as follows:
-    #
-    # readable & writable:: r+
-    # readable:: r
-    # writable:: w
-    #
-    # The _mode method takes the input io and should return an array 
-    # specifying whether or not io is readable and writable 
-    # (ie [readable, writable]). 
-    #
-    # See try_handle for more details.
-    def self.mode(io) 
-      readable, writable = try_handle(io, "mode")
+    PATCHES = []
+    
+    # Add version-specific patches
+    case RUBY_VERSION
+    when /^1.8/ then require "external/patches/ruby_1_8_io"
+    end
 
-      case
-      when readable && writable then "r+"
-      when readable then "r"
-      when writable then "w"
-      else
-        # occurs for r+ mode, for some reason
-        "r+"
-      end
-    end
-    
-    # Determines the length of the input io using the _length method
-    # for the input io class.  Non-External::IO inputs are extended 
-    # in this process.
-    #
-    # The _length method takes the input io, and should return the 
-    # current length of the input io (ie a flush operation may be 
-    # required). 
-    # 
-    # See try_handle for more details.
-    def self.length(io)
-      case io
-      when External::IO
-        try_handle(io, "length")
-      else
-        io.extend External::IO
-        io.length
-      end
-    end
-    
-    # Returns an array of bools determining if the input File 
-    # is readable and writable.
-    def self.file_mode(io)
-      begin
-        dup = io.dup
-        
-        # determine readable/writable by sending close methods
-        # to the duplicated IO.  If the io cannot  be closed for 
-        # read/write then it will raise an error, indicating that 
-        # it was not open in the given mode.   
-        [:close_read, :close_write].collect do |method|
-          begin
-            dup.send(method)
-            true
-          rescue(IOError)
-            false
-          end
-        end
-      ensure
-        # Be sure that the io is fully closed before proceeding!  
-        # (Otherwise Tempfiles will not be properly disposed of
-        # ... at least on Windows, perhaps on others)
-        dup.close if dup && !dup.closed?
-      end
-    end
-    
-    # Returns the length of the input File
-    def self.file_length(io)
-      io.fsync unless io.generic_mode == 'r'
-      File.size(io.path)
-    end
-    
-    # Returns an array of bools determining if the input Tempfile 
-    # is readable and writable.
-    def self.tempfile_mode(io)
-      file_mode(io.instance_variable_get("@tmpfile"))
-    end
-    
-    # Returns the length of the input Tempfile
-    def self.tempfile_length(io)
-      file_length(io)
-    end
-    
-    # Returns an array of bools determining if the input StringIO 
-    # is readable and writable.
-    #
-    #   s = StringIO.new("abcde", "r+")
-    #   External::IO.stringio_mode(s)  # => [true, true]
-    #
-    def self.stringio_mode(io)
-      [!io.closed_read?, !io.closed_write?]
-    end
-    
-    # Returns the length of the input StringIO
-    #
-    #   s = StringIO.new("abcde", "r+")
-    #   External::IO.length(s)  # => 5
-    #
-    def self.stringio_length(io)
-      io.string.length
-    end
-    
-    def self.extended(base) # :nodoc:
-      base.instance_variable_set("@generic_mode", mode(base))
+    # Add platform-specific patches
+    # case RUBY_PLATFORM
+    # when 'java' 
+    # end
+
+    def self.extended(base)
+      PATCHES.each {|patch| base.extend patch }
       base.reset_length
       base.default_blksize = 1024
       base.binmode
     end
     
-    protected
-    
-    # try_handle is a forwarding method allowing External::IO to handle
-    # non-File, non-Tempfile IO objects.  try_handle infers a method
-    # name based on the class of the input and trys to forward the 
-    # input io to that method within External::IO. For instance:
-    #
-    # * the _mode method for StringIO is 'stringio_mode'
-    # * the _length method for StringIO is 'stringio_length' 
-    # 
-    # Nested classes have '::' replaced by '_'.  Thus to add support
-    # for Some::Unknown::IO, extend External::IO as below:
-    #
-    #   module External::IO
-    #     def some_unknown_io_mode(io)
-    #       ...
-    #     end
-    # 
-    #     def some_unknown_io_length(io)
-    #       ...
-    #     end
-    #   end
-    #
-    # See stringio_mode and stringio_length for more details.
-    def self.try_handle(io, method)
-      method_name = io.class.to_s.downcase.gsub(/::/, "_") + "_#{method}"
-      if self.respond_to?(method_name)
-        External::IO.send(method_name, io)
-      else
-        raise "cannot determine #{method} for '%s'" % io.class
-      end
-    end
-    
-    public
-    
-    include Chunkable
-    
-    attr_reader :generic_mode
-
-    # True if self is a File or Tempfile
+    # True if self is a File
     def file?
-      self.kind_of?(File) || self.kind_of?(Tempfile)
+      self.kind_of?(File)
     end
 
     # Modified truncate that adjusts length
@@ -207,8 +76,18 @@ module External
     end
     
     # Resets length to the length returned by External::IO.length
+
+    # Determines the length of the input io using the _length method
+    # for the input io class.  Non-External::IO inputs are extended 
+    # in this process.
+    #
+    # The _length method takes the input io, and should return the 
+    # current length of the input io (ie a flush operation may be 
+    # required). 
+    # 
+    # See try_handle for more details.
     def reset_length
-      self.length = External::IO.length(self)
+      self.length = Utils.length(self)
     end
     
     #
@@ -229,9 +108,10 @@ module External
       # equal in comparison if the ios are equal
       return 0 if quick_compare(another)
       
-      self.flush unless self.generic_mode == 'r'
+      self.flush
       self.reset_length
-      another.flush unless another.generic_mode == 'r'
+      
+      another.flush
       another.reset_length
       
       if another.length > self.length
@@ -288,7 +168,7 @@ module External
       start_pos = self.pos
       length_written = 0
 
-      src.flush unless src.generic_mode == 'r'   
+      src.flush
       src.pos = range.begin 
       src.chunk(range) do |offset, length|
         length_written += write(src.read(length))
@@ -315,12 +195,12 @@ module External
       self.flush
       
       temp = Tempfile.new("copy")
-      temp.extend IO
+      temp.extend Io
       temp.insert(self, range)
       temp.close
 
       cp = File.open(temp.path, mode)
-      cp.extend IO
+      cp.extend Io
 
       if block_given?
         begin
@@ -333,80 +213,6 @@ module External
         cp
       end
     end
-  
-  end
-end
-
-# This code block modifies IO only if running on windows
-unless RUBY_PLATFORM.index('mswin').nil?
-require 'Win32API' 
-
-module External
-  module IO
-  
-    def self.extended(base) # :nodoc:
-      base.instance_variable_set("@generic_mode", mode(base))
-      base.reset_length
-      base.default_blksize = 1024
-      base.binmode
-      base.instance_variable_set("@pos", nil)
-    end
-    
-    # Modfied to properly determine file lengths on Windows. Uses code
-    # from 'win32/file/stat' (http://rubyforge.org/projects/win32utils/)
-    def self.file_length(io) # :nodoc:
-      io.fsync unless io.generic_mode == 'r'
-
-      # I would have liked to use win32/file/stat to do this... however, some issue
-      # arose involving FileUtils.cp, File.stat, and File::Stat.mode.  cp raised an 
-      # error because the mode would be nil for files.  I wasn't sure how to fix it, 
-      # so I've lifted the relevant code for pulling the large file size.
-
-      # Note this is a simplified version... if you base.path point to a chardev, 
-      # this may need to be changed, because apparently the call to the Win32API 
-      # may fail
-
-      stat_buf = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0].pack('ISSssssIILILILIL')
-      Win32API.new('msvcrt', '_stat64', 'PP', 'I').call(io.path, stat_buf)
-      stat_buf[24, 4].unpack('L').first # Size of file in bytes
-    end
-    
-    POSITION_MAX = 2147483647  # maximum size of long
-    
-    # Modified to handle positions past the 2Gb limit
-    def pos # :nodoc:
-      @pos || super
-    end
-    
-    # Positions larger than the max value of a long cannot be directly given 
-    # to the default +pos=+.  This version incrementally seeks to positions 
-    # beyond the maximum, if necessary.
-    #
-    # Note: setting the position beyond the 2Gb limit requires the use of a 
-    # sysseek statement.  As such, errors will arise if you try to position 
-    # an IO object that does not support this method (for example StringIO... 
-    # but then what are you doing with a 2Gb StringIO anyhow?)
-    def pos=(pos)
-      if pos < POSITION_MAX
-        super(pos)
-        @pos = nil
-      elsif @pos != pos
-        # note sysseek appears to be necessary here, rather than io.seek
-        @pos = pos
-        
-        super(POSITION_MAX)
-        pos -= POSITION_MAX
-        
-        while pos > POSITION_MAX
-          pos -= POSITION_MAX
-          self.sysseek(POSITION_MAX, Object::IO::SEEK_CUR)
-        end
-        
-        self.sysseek(pos, Object::IO::SEEK_CUR)
-      end
-    end
     
   end
 end
-
-end # end the windows-specific code
