@@ -1,24 +1,22 @@
 require File.join(File.dirname(__FILE__), 'external_test_helper.rb') 
-require 'ext_ind'
+require 'external_index'
 require 'fileutils'
-require 'ext_arr'
+#require 'ext_arr'
 
-unless Object.const_defined?(:ExtIndTest)
-
-class ExtIndTest < Test::Unit::TestCase
+class ExternalIndexTest < Test::Unit::TestCase
   acts_as_subset_test
 
   attr_reader :index, :tempfile
 
   def setup
     # cls represents an array
-    @cls = ExtInd
+    @cls = ExternalIndex
 
     @tempfile = Tempfile.new("indextest")
     @tempfile << array.pack(format)
     @tempfile.pos = 0
     
-    @index = ExtInd.new(@tempfile)
+    @index = ExternalIndex.new(@tempfile)
   end
   
   def array
@@ -41,55 +39,55 @@ class ExtIndTest < Test::Unit::TestCase
   #  readme doc test
   #
   
-  def test_readme_doc_for_ext_ind
-    ea = ExtArr.new
-    assert_equal ExtInd, ea._index.class
-    index = ea._index
-    assert_equal 'I*', index.format
-    assert_equal 2, index.frame
-    index << [1,2]
-    index << [3,4]
-    assert_equal [[1,2],[3,4]], index.to_a
-    
-    Tempfile.open('test_readme_doc_for_ext_ind') do |file|
-      file << [1,2,3].pack("IQS")
-      file << [4,5,6].pack("IQS")
-      file << [7,8,9].pack("IQS")
-      file.flush
-
-      index = ExtInd.new(file, :format => "IQS")
-      assert_equal [4,5,6], index[1]
-      assert_equal [[1,2,3],[4,5,6],[7,8,9]], index.to_a
-    end
-  end
+  # def test_readme_doc_for_ext_ind
+  #   ea = ExtArr.new
+  #   assert_equal ExternalIndex, ea._index.class
+  #   index = ea._index
+  #   assert_equal 'I*', index.format
+  #   assert_equal 2, index.frame
+  #   index << [1,2]
+  #   index << [3,4]
+  #   assert_equal [[1,2],[3,4]], index.to_a
+  #   
+  #   Tempfile.open('test_readme_doc_for_ext_ind') do |file|
+  #     file << [1,2,3].pack("IQS")
+  #     file << [4,5,6].pack("IQS")
+  #     file << [7,8,9].pack("IQS")
+  #     file.flush
+  # 
+  #     index = ExternalIndex.new(file, :format => "IQS")
+  #     assert_equal [4,5,6], index[1]
+  #     assert_equal [[1,2,3],[4,5,6],[7,8,9]], index.to_a
+  #   end
+  # end
   
   #
   # setup tests
   #
   
   def test_setup
-    assert_equal ExtInd, @cls
+    assert_equal ExternalIndex, @cls
     
     assert_equal 0, index.pos
     assert_equal 5, index.length
     assert_equal 4, index.frame_size
     assert_equal 8 * 2**20, index.buffer_size
     assert_equal [0], index.nil_value
-    assert !index.cached?
-    assert_nil index.cache
-    assert_equal({:format => "I", :buffer_size => 8 * 2**20, :nil_value => [0], :cached => false}, index.options)
+    assert_equal({:format => "I", :buffer_size => 8 * 2**20, :nil_value => [0]}, index.options)
     
     tempfile.pos = 0
     assert_equal array.pack(format), tempfile.read
     assert_equal tempfile.path, index.io.path
   end
   
+  
+
   #
-  # class read tests
+  # ExternalIndex.read test
   #
   
   def test_read_returns_the_index_file_in_frame
-    assert_equal framed_array, ExtInd.read(tempfile.path)
+    assert_equal framed_array, ExternalIndex.read(tempfile.path)
     
     tempfile.pos = tempfile.length
     tempfile << [6].pack("I")
@@ -97,258 +95,232 @@ class ExtIndTest < Test::Unit::TestCase
     tempfile.pos = 0
     assert_equal [1,2,3,4,5,6].pack("I*"), tempfile.read
     
-    assert_equal [[1,2],[3,4],[5,6]], ExtInd.read(tempfile.path, :format => 'II')
+    assert_equal [[1,2],[3,4],[5,6]], ExternalIndex.read(tempfile.path, :format => 'II')
   end
   
   #
-  # class directive size tests
+  # ExternalIndex.directive_size test
   #
   
   def test_directive_size_returns_the_number_of_bytes_to_pack_a_directive
     # @     |  Moves to absolute position
     # not implemented
-    assert_nil ExtInd.directive_size('@')
+    assert_nil ExternalIndex.directive_size('@')
     # A     |  ASCII string (space padded, count is width)
     assert_equal 1, ["a"].pack("A").length
-    assert_equal 1, ExtInd.directive_size('A')
+    assert_equal 1, ExternalIndex.directive_size('A')
     # a     |  ASCII string (null padded, count is width)
     assert_equal 1, ["a"].pack("a").length
-    assert_equal 1, ExtInd.directive_size('a')
+    assert_equal 1, ExternalIndex.directive_size('a')
     # B     |  Bit string (descending bit order)
     assert_equal 1, ['a'].pack("B").length
-    assert_equal 1, ExtInd.directive_size('B')
+    assert_equal 1, ExternalIndex.directive_size('B')
     # b     |  Bit string (ascending bit order)
     assert_equal 1, ['a'].pack("b").length
-    assert_equal 1, ExtInd.directive_size('b')
+    assert_equal 1, ExternalIndex.directive_size('b')
     # C     |  Unsigned char
     assert_equal 1, [1].pack("C").length
-    assert_equal 1, ExtInd.directive_size('C')
+    assert_equal 1, ExternalIndex.directive_size('C')
     # c     |  Char
     assert_equal 1, [1].pack("c").length
-    assert_equal 1, ExtInd.directive_size('c')
+    assert_equal 1, ExternalIndex.directive_size('c')
     # D, d  |  Double-precision float, native format
     assert_equal 8, [1].pack("D").length
-    assert_equal 8, ExtInd.directive_size('D')
+    assert_equal 8, ExternalIndex.directive_size('D')
     assert_equal 8, [1].pack("d").length
-    assert_equal 8, ExtInd.directive_size('d')
+    assert_equal 8, ExternalIndex.directive_size('d')
     # E     |  Double-precision float, little-endian byte order
     assert_equal 8, [1].pack("E").length
-    assert_equal 8, ExtInd.directive_size('E')
+    assert_equal 8, ExternalIndex.directive_size('E')
     # e     |  Single-precision float, little-endian byte order
     assert_equal 4, [1].pack("e").length
-    assert_equal 4, ExtInd.directive_size('e')
+    assert_equal 4, ExternalIndex.directive_size('e')
     # F, f  |  Single-precision float, native format
     assert_equal 4, [1].pack("F").length
-    assert_equal 4, ExtInd.directive_size('F')
+    assert_equal 4, ExternalIndex.directive_size('F')
     assert_equal 4, [1].pack("f").length
-    assert_equal 4, ExtInd.directive_size('f')
+    assert_equal 4, ExternalIndex.directive_size('f')
     # G     |  Double-precision float, network (big-endian) byte order
     assert_equal 8, [1].pack("G").length
-    assert_equal 8, ExtInd.directive_size('G')
+    assert_equal 8, ExternalIndex.directive_size('G')
     # g     |  Single-precision float, network (big-endian) byte order
     assert_equal 4, [1].pack("g").length
-    assert_equal 4, ExtInd.directive_size('g')
+    assert_equal 4, ExternalIndex.directive_size('g')
     # H     |  Hex string (high nibble first)
     assert_equal 1, ['a'].pack("H").length
-    assert_equal 1, ExtInd.directive_size('H')
+    assert_equal 1, ExternalIndex.directive_size('H')
     # h     |  Hex string (low nibble first)
     assert_equal 1, ['a'].pack("h").length
-    assert_equal 1, ExtInd.directive_size('h')
+    assert_equal 1, ExternalIndex.directive_size('h')
     # I     |  Unsigned integer
     assert_equal 4, [1].pack("I").length
-    assert_equal 4, ExtInd.directive_size('I')
+    assert_equal 4, ExternalIndex.directive_size('I')
     # i     |  Integer
     assert_equal 4, [1].pack("i").length
-    assert_equal 4, ExtInd.directive_size('i')
+    assert_equal 4, ExternalIndex.directive_size('i')
     # L     |  Unsigned long
     assert_equal 4, [1].pack("L").length
-    assert_equal 4, ExtInd.directive_size('L')
+    assert_equal 4, ExternalIndex.directive_size('L')
     # l     |  Long
     assert_equal 4, [1].pack("l").length
-    assert_equal 4, ExtInd.directive_size('l')
+    assert_equal 4, ExternalIndex.directive_size('l')
     # M     |  Quoted printable, MIME encoding (see RFC2045)
     assert_equal 3, ['a'].pack("M").length
-    assert_equal 3, ExtInd.directive_size('M')
+    assert_equal 3, ExternalIndex.directive_size('M')
     # m     |  Base64 encoded string
     assert_equal 5, ['a'].pack("m").length
-    assert_equal 5, ExtInd.directive_size('m')
+    assert_equal 5, ExternalIndex.directive_size('m')
     # N     |  Long, network (big-endian) byte order
     assert_equal 4, [1].pack("N").length
-    assert_equal 4, ExtInd.directive_size('N')
+    assert_equal 4, ExternalIndex.directive_size('N')
     # n     |  Short, network (big-endian) byte-order
     assert_equal 2, [1].pack("n").length
-    assert_equal 2, ExtInd.directive_size('n')
+    assert_equal 2, ExternalIndex.directive_size('n')
     # P     |  Pointer to a structure (fixed-length string)
     assert_equal 4, ['a'].pack("P").length
-    assert_equal 4, ExtInd.directive_size('P')
+    assert_equal 4, ExternalIndex.directive_size('P')
     # p     |  Pointer to a null-terminated string
     assert_equal 4, ['a'].pack("p").length
-    assert_equal 4, ExtInd.directive_size('p')
+    assert_equal 4, ExternalIndex.directive_size('p')
     # Q, q  |  64-bit number
     assert_equal 8, [1].pack("Q").length
-    assert_equal 8, ExtInd.directive_size('Q')
+    assert_equal 8, ExternalIndex.directive_size('Q')
     assert_equal 8, [1].pack("q").length
-    assert_equal 8, ExtInd.directive_size('q')
+    assert_equal 8, ExternalIndex.directive_size('q')
     # S     |  Unsigned short
     assert_equal 2, [1].pack("S").length
-    assert_equal 2, ExtInd.directive_size('S')
+    assert_equal 2, ExternalIndex.directive_size('S')
     # s     |  Short
     assert_equal 2, [1].pack("s").length
-    assert_equal 2, ExtInd.directive_size('s')
+    assert_equal 2, ExternalIndex.directive_size('s')
     # U     |  UTF-8
     assert_equal 1, [1].pack("U").length
-    assert_equal 1, ExtInd.directive_size('U')
+    assert_equal 1, ExternalIndex.directive_size('U')
     # u     |  UU-encoded string
     assert_equal 6, ['a'].pack("u").length
-    assert_equal 6, ExtInd.directive_size('u')
+    assert_equal 6, ExternalIndex.directive_size('u')
     # V     |  Long, little-endian byte order
     assert_equal 4, [1].pack("V").length
-    assert_equal 4, ExtInd.directive_size('V')
+    assert_equal 4, ExternalIndex.directive_size('V')
     # v     |  Short, little-endian byte order
     assert_equal 2, [1].pack("v").length
-    assert_equal 2, ExtInd.directive_size('v')
+    assert_equal 2, ExternalIndex.directive_size('v')
     # w     |  BER-compressed integer\fnm
     # not implemented
     assert_equal 1, [1].pack("w").length
-    assert_equal 1, ExtInd.directive_size('w')
+    assert_equal 1, ExternalIndex.directive_size('w')
     # X     |  Back up a byte
     # not implemented
-    assert_nil ExtInd.directive_size('X')
+    assert_nil ExternalIndex.directive_size('X')
     # x     |  Null byte
     assert_equal 1, [nil].pack("x").length
-    assert_equal 1, ExtInd.directive_size('x')
+    assert_equal 1, ExternalIndex.directive_size('x')
     # Z     |  Same as ``a'', except that null is added with *
     assert_equal 1, ['a'].pack("Z").length
-    assert_equal 1, ExtInd.directive_size('Z')
+    assert_equal 1, ExternalIndex.directive_size('Z')
   end
-  
+ 
   #
   # initialize tests
   #
-  
-  def test_index_initialized_to_single_int_format_by_default
-    index = @cls.new
-  
-    assert_equal 'I*', index.format
-    assert_equal 1, index.frame
+
+  def test_default_initialize
+    index = ExternalIndex.new
+    
+    assert_equal 0, index.pos
+    assert_equal 0, index.length
     assert_equal 4, index.frame_size
+    assert_equal 8 * 2**20, index.buffer_size
     assert_equal [0], index.nil_value
-    assert !index.cached?
-    assert_nil index.cache
+    assert_equal({:format => "I", :buffer_size => 8 * 2**20, :nil_value => [0]}, index.options)
   end
   
-  def test_initialize_calculates_frame_and_frame_size_from_format
-    {
-      'I' => [1, 4],
-      'II' => [2, 8],
-      'IQS' => [3, 14],
-      
-      'I8I' => [9, 36],
-      'I2QI2' => [5, 24]
-    }.each_pair do |format, expected|
-      index = @cls.new(nil, :format => format)
-  
-      assert_equal expected, [index.frame, index.frame_size]
-      assert_equal Array.new(expected.first, 0), index.nil_value
-    end
+  def test_initialize_calculates_frame_from_format
+    index = @cls.new nil, :format => 'III'
+    assert_equal 3, index.frame
+    
+    index = @cls.new nil, :format => 'ID'
+    assert_equal 2, index.frame
+    
+    index = @cls.new nil, :format => 'I8I'
+    assert_equal 9, index.frame
   end
   
-  def test_formats_with_multiplicies_can_be_processed_in_bulk
-    index = @cls.new(nil, :format => 'I2IIII10')
-    assert_equal "I*", index.format
-    assert_equal 15, index.frame
+  def test_initialize_calculates_frame_size_from_format
+    index = @cls.new nil, :format => 'III'
+    assert_equal 12, index.frame_size
+    
+    index = @cls.new nil, :format => 'ID'
+    assert_equal 12, index.frame_size
+    
+    index = @cls.new nil, :format => 'I8I'
+    assert_equal 36, index.frame_size
   end
   
-  def test_format_with_unsupported_directive_raises_error
+  def test_initialize_condenses_bulk_formats
+    index = @cls.new nil, :format => 'III'
+    assert_equal 'I*', index.format
+    assert index.process_in_bulk
+    
+    index = @cls.new nil, :format => 'I8I'
+    assert_equal 'I*', index.format
+    assert index.process_in_bulk
+  end
+  
+  def test_initialize_with_format_containing_an_unsupported_directive_raises_error
     assert_raise(ArgumentError) { @cls.new(nil, :format => 'x') }
     assert_raise(ArgumentError) { @cls.new(nil, :format => 'I_I') }
     assert_raise(ArgumentError) { @cls.new(nil, :format => 'I*') }
   end
   
-  def test_default_nil_value_is_calculated_according_to_frame
-    index = @cls.new(nil, :format => "I")
+  def test_initialize_sets_buffer_size
+    index = @cls.new nil, :buffer_size => 1000
+    assert_equal 1000, index.buffer_size
+  end
+  
+  def test_initialize_sets_nil_value_to_an_frame_sized_array_of_zeros
+    index = @cls.new nil, :format => 'I'
     assert_equal [0], index.nil_value
     
-    index = @cls.new(nil, :format => "II")
-    assert_equal [0, 0], index.nil_value
-    
-    index = @cls.new(nil, :format => "I2I")
-    assert_equal [0, 0, 0], index.nil_value
+    index = @cls.new nil, :format => 'III'
+    assert_equal [0,0,0], index.nil_value
   end
   
-  def test_nil_value_can_be_provided_in_options
-    index = @cls.new(nil, :nil_value => [8])
-    assert_equal [8], index.nil_value
-    
-    index = @cls.new(nil, :format => "II", :nil_value => [8,9])
-    assert_equal [8,9], index.nil_value
-  end
-  
-  def test_nil_value_option_raises_error_if_out_of_frame
-    assert_raise(ArgumentError) { @cls.new(nil, :nil_value => [8, 9]) }
-    assert_raise(ArgumentError) { @cls.new(nil, :format => 'II', :nil_value => [0]) }
-  end
-  
-  #
-  # another tests
-  #
-  
-  def test_another_returns_new_instance_with_same_options
-    a = @cls[1,2,3]
-    a.buffer_size = 10
-    b = a.another
-    
-    assert_not_equal(a.object_id, b.object_id)
-    assert_equal(@cls[], b)
-    assert_equal(10, b.buffer_size)
-  end
-  
-  def test_another_initializes_with_input_options_merged_to_instance_options
-    a = @cls[1,2,3]
-    a.buffer_size = 10
-    b = a.another :buffer_size => 20
-    
-    assert_not_equal(a.object_id, b.object_id)
-    assert_equal(@cls[], b)
-    assert_equal(10, a.buffer_size)
-    assert_equal(20, b.buffer_size)
+  def test_initialize_raises_error_if_specified_nil_value_is_incompatible_with_format
+    assert_raise(ArgumentError) { @cls.new nil, :format => 'I', :nil_value => [0,1] }
+    assert_raise(ArgumentError) { @cls.new nil, :format => 'II', :nil_value => [0] }
+    assert_raise(ArgumentError) { @cls.new nil, :format => 'I', :nil_value => [1.2] }
+    assert_raise(ArgumentError) { @cls.new nil, :format => 'I', :nil_value => ['a'] }
   end
   
   #
   # buffer_size test
   #
   
-  def test_index_and_io_chunk_and_gap_size_are_calculated_relative_to_buffer_size
-    index = @cls.new(nil, :buffer_size => 40000)
-    assert_equal 40000, index.buffer_size
-    assert_equal 4, index.frame_size
-    assert_equal 10000, index.default_blksize
-    assert_equal 40000, index.io.default_blksize
-
-    index.buffer_size = 80000
-    assert_equal 20000, index.default_blksize
-    assert_equal 80000, index.io.default_blksize
-  end
-  
   def test_buffer_size_is_io_default_blksize
-    index = @cls.new
-    
     index.io.default_blksize = 1000
     assert_equal 1000, index.io.default_blksize
     assert_equal 1000, index.buffer_size
+  end
+  
+  def test_set_buffer_size_sets_default_blksize_for_io_and_self
+    assert_equal 4, index.frame_size
+    
+    index.buffer_size = 40
+    assert_equal 10, index.default_blksize
+    assert_equal 40, index.io.default_blksize
   end
   
   #
   # default_blksize test
   #
   
-  def test_default_blksize_sets_io_default_blksize
-    index = @cls.new
+  def test_set_default_blksize_sets_default_blksize_for_io_and_self
     assert_equal 4, index.frame_size
     
-    index.default_blksize = 10000
-    assert_equal 10000, index.default_blksize
-    assert_equal 40000, index.io.default_blksize
+    index.default_blksize = 10
+    assert_equal 10, index.default_blksize
+    assert_equal 40, index.io.default_blksize
   end
   
   #
@@ -356,10 +328,82 @@ class ExtIndTest < Test::Unit::TestCase
   # 
   
   def test_nil_value_documentation
-    i = @cls.new 
-    assert_equal [0], i.nil_value         
-    assert_equal "\000\000\000\000",  i.nil_value(false)  
+    index = ExternalIndex.new 
+    assert_equal [0], index.nil_value         
+    assert_equal "\000\000\000\000",  index.nil_value(false)  
   end
+  
+  #
+  # index_attrs test
+  #
+  
+  def test_index_attrs_returns_frame_format_nil_value_array
+    assert_equal [index.frame, index.format, index.nil_value], index.index_attrs
+  end
+  
+  #
+  # options test
+  #
+  
+  def test_options_returns_options_hash_for_current_settings
+    assert_equal({
+      :format => 'I', 
+      :buffer_size => ExternalIndex::DEFAULT_BUFFER_SIZE, 
+      :nil_value => [0]
+    }, index.options)
+    
+    index.buffer_size = 40
+    assert_equal({
+      :format => 'I', 
+      :buffer_size => 40, 
+      :nil_value => [0]
+    }, index.options)
+  end
+  
+  def test_options_expands_packed_formats
+    index = @cls.new nil, :format => 'III'
+    assert_equal 'I*', index.format
+    
+    assert_equal({
+      :format => 'III', 
+      :buffer_size => ExternalIndex::DEFAULT_BUFFER_SIZE, 
+      :nil_value => [0,0,0]
+    }, index.options)
+  end
+  
+  #
+  # another tests
+  #
+  
+  def test_another_returns_new_instance
+    a = @cls[1,2,3]
+    b = a.another
+    
+    assert_not_equal(a.object_id, b.object_id)
+    assert_equal(@cls[], b)
+  end
+  
+  def test_another_has_same_options_as_self
+    a = @cls.new nil, :format => 'ID', :nil_value => [1,2], :buffer_size => 40
+    b = a.another
+    
+    assert_equal 'ID', b.format
+    assert_equal [1,2], b.nil_value
+    assert_equal 40, b.buffer_size
+  end
+  
+  def test_another_uses_override_options
+    a = @cls[1,2,3]
+    a.buffer_size = 10
+    b = a.another :buffer_size => 20
+    
+    assert_equal(10, a.buffer_size)
+    assert_equal(20, b.buffer_size)
+  end
+ 
+  ########################
+  # ...
+  ########################
   
   #
   # length test
@@ -375,6 +419,10 @@ class ExtIndTest < Test::Unit::TestCase
     tempfile.length = 0
     assert_equal 0, index.length
   end
+  
+  ########################
+  # ...
+  ########################
   
   #
   # pos test
@@ -536,8 +584,23 @@ class ExtIndTest < Test::Unit::TestCase
     assert_raise(ArgumentError) { index.read(1,-6) }
   end
   
+  def test_read_handles_mixed_formats
+    index = @cls.new tempfile, :format => "IQS"
+    tempfile.pos = 0
+    a = [1,2,3].pack("IQS")
+    b = [4,5,6].pack("IQS")
+    c = [7,8,9].pack("IQS")
+    tempfile << a + b + c
+    
+    index.pos=0
+    assert_equal [[1,2,3],[4,5,6],[7,8,9]], index.read
+    
+    index.pos=1
+    assert_equal [4,5,6], index.read(1)
+  end
+  
   #
-  # test write
+  # write test
   #
   
   def test_write_documentation
@@ -550,7 +613,7 @@ class ExtIndTest < Test::Unit::TestCase
   
   
   #
-  # test unframed_write
+  # unframed_write test
   #
   
   def test_unframed_write_documentation
@@ -604,25 +667,6 @@ class ExtIndTest < Test::Unit::TestCase
     index = @cls.new(nil, :format => "II")
     assert_raise(ArgumentError) { index.unframed_write([1]) }
     assert_raise(ArgumentError) { index.unframed_write([1,2,3]) }
-  end
-  
-  #
-  # mixed formats test
-  #
-  
-  def test_read_handles_mixed_formats
-    index = @cls.new tempfile, :format => "IQS"
-    tempfile.pos = 0
-    a = [1,2,3].pack("IQS")
-    b = [4,5,6].pack("IQS")
-    c = [7,8,9].pack("IQS")
-    tempfile << a + b + c
-    
-    index.pos=0
-    assert_equal [[1,2,3],[4,5,6],[7,8,9]], index.read
-    
-    index.pos=1
-    assert_equal [4,5,6], index.read(1)
   end
   
   def test_unframed_write_handles_mixed_formats
@@ -822,7 +866,7 @@ class ExtIndTest < Test::Unit::TestCase
   
   def test_AREF_doc
     io = StringIO.new [1,2,3,4,5].pack("I*")
-    i = ExtInd.new(io, :format => 'I')
+    i = ExternalIndex.new(io, :format => 'I')
     assert_equal [3], i[2]
     assert_equal nil, i[6]
     assert_equal [[2],[3]], i[1,2]
@@ -837,7 +881,7 @@ class ExtIndTest < Test::Unit::TestCase
   
   def test_ASET_doc
     io = StringIO.new ""
-    i = ExtInd.new(io, :format => 'I')
+    i = ExternalIndex.new(io, :format => 'I')
     assert_equal [0], i.nil_value   
                    
     i[4] = [4]                   
@@ -909,7 +953,7 @@ class ExtIndTest < Test::Unit::TestCase
   end
 
   def test_PLUS # '+'
-    # Changes: strings not allowed in ExtInd
+    # Changes: strings not allowed in ExternalIndex
     # replace 'cat' with 4, 'dog' with 5
     
     assert_equal(@cls[],     @cls[]  + @cls[])
@@ -920,7 +964,7 @@ class ExtIndTest < Test::Unit::TestCase
     assert_equal(@cls[4, 5, 1, 2, 3], @cls[4,5] + @cls[*(1..3).to_a])
 
     # Additional:
-    # check addition of Array to ExtInd (can't add ExtInd to Array)
+    # check addition of Array to ExternalIndex (can't add ExternalIndex to Array)
     assert_equal(@cls[4, 5, 1, 2, 3], @cls[4,5] + [[1],[2],[3]])
     assert_raise(TypeError) { [4,5] + @cls[*(1..3).to_a] }
     
@@ -940,7 +984,7 @@ class ExtIndTest < Test::Unit::TestCase
   
   def test_LSHIFT # '<<'
     # Changes: inputs must be in frame and can't take
-    # strings.  And ExtInd can't accept itself as an entry
+    # strings.  And ExternalIndex can't accept itself as an entry
     
     a = @cls[]
     #a << 1
@@ -961,7 +1005,7 @@ class ExtIndTest < Test::Unit::TestCase
   end
 
   def test_CMP # '<=>'
-    # Changes: strings not allowed in ExtInd
+    # Changes: strings not allowed in ExternalIndex
     # replace 'cat' with 4, 'dog' with 5
     assert_equal(-1, 4 <=> 5)
     
@@ -1269,7 +1313,7 @@ class ExtIndTest < Test::Unit::TestCase
     assert_equal(@cls[1,1001,0,0,10003], a)
     
     # -- insert beyond end of index, with inconsistent range --
-    # first check the array behavior, then assert the same with ExtInd
+    # first check the array behavior, then assert the same with ExternalIndex
     a = (0..5).to_a
     assert_equal([11,12,13], a[11..12] = [11,12,13])
     assert_equal((0..5).to_a + [nil,nil,nil,nil,nil] + (11..13).to_a, a)
@@ -1307,7 +1351,7 @@ class ExtIndTest < Test::Unit::TestCase
   end
   
   def test_collect
-    # Changes: ExtInd doesn't support the types used, 
+    # Changes: ExternalIndex doesn't support the types used, 
     # collection must be in frame, and assertions must
     # be rewritten with @cls
     
@@ -1328,7 +1372,7 @@ class ExtIndTest < Test::Unit::TestCase
   end
   
   def test_concat
-    # Changes: ExtInd does not support Array/ExtInd nesting
+    # Changes: ExternalIndex does not support Array/ExternalIndex nesting
     
     assert_equal(@cls[1, 2, 3, 4],     @cls[1, 2].concat(@cls[3, 4]))
     assert_equal(@cls[1, 2, 3, 4],     @cls[].concat(@cls[1, 2, 3, 4]))
@@ -1398,7 +1442,7 @@ class ExtIndTest < Test::Unit::TestCase
     assert(@cls[1, 1, 2, 2].eql?(@cls[1, 1, 2, 2]))
 
     # Changes: all values are treated according to the format
-    # so these floats are converted to ints and the ExtInds 
+    # so these floats are converted to ints and the ExternalIndexs 
     # are equal
     #assert(!@cls[1.0, 1.0, 2.0, 2.0].eql?(@cls[1, 1, 2, 2]))
     assert(@cls[1.0, 1.0, 2.0, 2.0].eql?(@cls[1, 1, 2, 2]))
@@ -1518,6 +1562,4 @@ class ExtIndTest < Test::Unit::TestCase
     assert_raise(ArgumentError) { a[0,1] = b }
   end
   
-end
-
 end

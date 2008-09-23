@@ -66,6 +66,13 @@ module External
       result
     end
     
+    # Flushes the io and resets the io length.  Returns self
+    def flush
+      io.flush
+      io.reset_length
+      self
+    end
+    
     protected
     
     include External::Chunkable

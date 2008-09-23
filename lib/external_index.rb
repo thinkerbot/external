@@ -15,12 +15,12 @@ require 'strscan'
 # the exception).  Thus if you change the file length by any means, the file length must be
 # reset.
 #
-# ExtInd allows array-like access to formatted binary data stored on disk.  
+# ExternalIndex allows array-like access to formatted binary data stored on disk.  
 #   
 # == Caching
 #
-# To improve peformance, ExtInd can be run in a cached mode where the data is loaded into
-# memory and kept in memory until the ExtInd closes (or is flushed).  Cached mode is 
+# To improve peformance, ExternalIndex can be run in a cached mode where the data is loaded into
+# memory and kept in memory until the ExternalIndex closes (or is flushed).  Cached mode is 
 # recommended for all but the largest index files, which cannot or should not be loaded
 # into memory.  
 #++
@@ -28,9 +28,18 @@ require 'strscan'
 #--
 # BUGS
 # - cached mode does not check that inputs are valid... so you can add in 
-#   strings and other such nonsense: ExtInd["cat", "dog", "mouse", {:cached => true}]
+#   strings and other such nonsense: ExternalIndex["cat", "dog", "mouse", {:cached => true}]
 #++
-class ExtInd < External::Base
+
+
+# Provides array-like access to index data kept on disk.  Index data is
+# defined by a packing format (see Array#pack) like 'II', which would 
+# represent two integers; in this case each member of the ExternalIndex
+# would be a two-integer array.  
+#
+# All directives except '@' and 'X' are allowed, in any combination. 
+#
+class ExternalIndex < External::Base
   
   class << self
     def [](*args)
@@ -86,28 +95,45 @@ class ExtInd < External::Base
     end
   end
   
-  attr_reader :frame, :frame_size, :format, :original_format, :cache, :process_in_bulk
-  
   include External::Chunkable
- 
+  
+  # The format of the indexed data.  Format may be optimized from 
+  # the original input format in cases like 'III' where bulk
+  # processing is useful.
+  attr_reader :format
+  
+  # The number of elements in each entry, ex: ('I' => 1, 'III' => 3).  
+  # frame is calculated from format.
+  attr_reader :frame
+  
+  # The number of bytes required for each entry; frame_size is
+  # calculated from format.
+  attr_reader :frame_size
+  
+  # A flag indicating whether or not the format was optimized
+  # to pack/unpack entries in bulk; proccess_in_bulk is
+  # automatically set according to format.
+  attr_reader :process_in_bulk
+  
+  # The default buffer size (8Mb)
+  DEFAULT_BUFFER_SIZE = 8 * 2**20     
+  
   def initialize(io=nil, options={})
     super(io)
     
     options = {
       :format => "I",
       :nil_value => nil,
-      :cached => false,
-      :buffer_size => 8 * 2**20     # 8Mb
+      :buffer_size => DEFAULT_BUFFER_SIZE
     }.merge(options)
   
     # set the format, frame, and frame size
-    @format = options[:format]
-    @original_format = @format
+    format = options[:format]
     @frame = 0
     @frame_size = 0
     @process_in_bulk = true
     
-    scanner = StringScanner.new(@format)
+    scanner = StringScanner.new(format)
     if scanner.skip(/\d+/)
       # skip leading numbers ... they are normally ignored
       # by pack and unpack but you could raise an error.
@@ -115,7 +141,7 @@ class ExtInd < External::Base
 
     bulk_directive = nil
     while directive = scanner.scan(/./)
-      size = ExtInd.directive_size(directive)
+      size = ExternalIndex.directive_size(directive)
       raise ArgumentError.new("cannot determine size of: '#{directive}'") if size == nil
       
       # scan for a multiplicity factor
@@ -133,11 +159,9 @@ class ExtInd < External::Base
     end
     
     # Repetitive formats like "I", "II", "I2I", 
-    # etc can be packed and unpacked in bulk
-    if @process_in_bulk
-      @format = "#{bulk_directive}*"
-    end
-    
+    # etc can be packed and unpacked in bulk.
+    @format = process_in_bulk ? "#{bulk_directive}*" : format
+
     # set the buffer size
     self.buffer_size = options[:buffer_size]
 
@@ -146,21 +170,21 @@ class ExtInd < External::Base
     # was specified, ensure it is of the correct
     # frame size and can be packed
     nil_value = if options[:nil_value] == nil 
-      self.class.default_nil_value(@original_format, @frame)
+      self.class.default_nil_value(format, frame)
     else
       options[:nil_value]
     end
     
     begin 
-      @nil_value = nil_value.pack(@format)
-      raise "" unless nil_value.length == @frame && @nil_value.unpack(@format) == nil_value
+      @nil_value = nil_value.pack(format)
+      unless nil_value.length == frame && @nil_value.unpack(format) == nil_value
+        raise "" # just to invoke the rescue block
+      end
     rescue
-      raise ArgumentError.new(
-         "unacceptable nil value '#{nil_value}': the nil value must " +
-         "be in frame and packable using the format '#{format}'")
+      raise ArgumentError, 
+        "unacceptable nil value '#{nil_value}': the nil value must " +
+        "be in frame and packable using the format '#{format}'"
     end
-    
-    self.cached = options[:cached]
   end
   
   # Returns the buffer size of self (equal to io.default_blksize and 
@@ -184,82 +208,34 @@ class ExtInd < External::Base
     @default_blksize = value
     self.io.default_blksize = value * frame_size
   end
-  
-  # An array of the index attributes of self: [frame, format, nil_value]
-  def index_attrs # :nodoc:
-    [frame, format, nil_value]
-  end
-  
-  # Returns options corresponding to the current settings of self,
-  # in the same format as used during initialization.
-  def options
-    { :format => original_format,
-      :nil_value => nil_value,
-      :cached => cached?,
-      :buffer_size => buffer_size}
-  end
-  
+    
   # Returns the string value used for nils.  Specify unpacked to 
   # show the unpacked array value.
   #
-  #   i = ExtInd.new 
-  #   i.nil_value            # => [0]
-  #   i.nil_value(false)     # => "\000\000\000\000"
+  #   index = ExternalIndex.new 
+  #   index.nil_value            # => [0]
+  #   index.nil_value(false)     # => "\000\000\000\000"
+  #
   def nil_value(unpacked=true)
     unpacked ? @nil_value.unpack(format) : @nil_value
   end
   
-  # True if cached 
-  def cached?
-    cache != nil
+  # An array of the index attributes of self: [frame, format, nil_value]
+  def index_attrs
+    [frame, format, nil_value]
   end
   
-  # Sets the index to cache data or not.  When setting cached to 
-  # false, currently cached data is flushed; to set cached to
-  # false WITHOUT flushing, use cached = nil.
-  def cached=(input)
-    if input && !cache
-      @cache_pos = self.pos
-      @cache = read(nil, 0)
-      
-      # ensure the cache is an array of framed items...
-      # if io has only one item, then read returns an 
-      # array like [0] rather than [[0]]
-      unless @cache.empty? || @cache.first.kind_of?(Array)
-        @cache = [@cache] 
-      end
-    elsif !input && cache
-      self.flush unless input == nil
-      @cache = nil
-      self.pos = @cache_pos
-      @cache_pos = nil
-    end
+  # Returns initialization options for the current settings of self.
+  def options
+    { :format => process_in_bulk ? format[0,1] * frame : format,
+      :nil_value => nil_value,
+      :buffer_size => buffer_size}
   end
   
-  # Flushes the io, writing cached data if necessary.
-  def flush
-    if cached?
-      io.truncate(0)
-      cache.each {|item| io.write item.pack(format) }
-    end
-      
-    io.flush
-    io.reset_length
-  end
-   
-  # Flushes cached data (if specified) and closes the io.  If a path
-  # is specified and io.path is an existing file, it will be moved
-  # to path. See External::Base#close
-  def close(path=nil, flush=true)
-    self.cached = (flush ? false : nil) if cached?
-    super(path)
-  end
-  
-  # Returns another instance of ExtInd, initialized with the 
+  # Returns another instance of ExternalIndex, initialized with the 
   # input options merged to the current options of self.
-  def another(options={})
-    options = self.options.merge(options)
-    self.class.new(nil, options)
+  def another(overrides={})
+    self.class.new(nil, options.merge(overrides))
   end
 
   ###########################
@@ -298,9 +274,6 @@ class ExtInd < External::Base
   def <=>(another)
     return 0 if self.object_id == another.object_id
     
-    # reverse comparison in case another is an ExtInd
-    return -1 * (another <=> cache) if cached?
-
     case another
     when Array
       if another.length < self.length
@@ -311,10 +284,10 @@ class ExtInd < External::Base
       else
         self.to_a <=> another
       end
-    when ExtInd
+    when ExternalIndex
       self.io.sort_compare(another.io, (buffer_size/2).ceil)
     else
-      raise TypeError.new("can't convert from #{another.class} to ExtInd or Array")
+      raise TypeError.new("can't convert from #{another.class} to ExternalIndex or Array")
     end
   end
 
@@ -325,16 +298,14 @@ class ExtInd < External::Base
     when Array
       return false unless self.length == another.length
       self.to_a == another
-    when ExtInd
+    when ExternalIndex
       return false unless self.length == another.length
-      
-      unless self.cached? && another.cached?
-        return false unless self.index_attrs == another.index_attrs
-        if (self.io.sort_compare(another.io, (buffer_size/2).ceil)) == 0
-          return true
-        end
+
+      return false unless self.index_attrs == another.index_attrs
+      if (self.io.sort_compare(another.io, (buffer_size/2).ceil)) == 0
+        return true
       end
-      
+
       self.to_a == another.to_a
     else
       false
@@ -347,7 +318,7 @@ class ExtInd < External::Base
   # element). Returns nil if the index (or starting index) is out of range.
   #
   #   io = StringIO.new [1,2,3,4,5].pack("I*")
-  #   i = ExtInd.new(io, :format => 'I')
+  #   i = ExternalIndex.new(io, :format => 'I')
   #   i[2]                   #=> [3]
   #   i[6]                   #=> nil
   #   i[1, 2]                #=> [ [2], [3] ]
@@ -362,9 +333,6 @@ class ExtInd < External::Base
   #
   # Note that entries are returned in frame, as arrays.
   def [](index, length=nil)
-    # return the cached value if cached
-    return (length == nil ? cache[index] : cache[index,length]) if cached?
-    
     case index
     when Fixnum
       index += self.length if index < 0
@@ -412,7 +380,7 @@ class ExtInd < External::Base
   # See also push, and unshift.
   #
   #   io = StringIO.new ""
-  #   i = ExtInd.new(io, :format => 'I')
+  #   i = ExternalIndex.new(io, :format => 'I')
   #   i.nil_value                  # => [0]
   #   i[4] = [4]                   # => [[0], [0], [0], [0], [4]]
   #   i[0, 3] = [ [1], [2], [3] ]  # => [[1], [2], [3], [0], [4]]
@@ -423,7 +391,7 @@ class ExtInd < External::Base
   #   i[1..-1] = nil               # => [[8]]
   #
   # Note that []= must take entries in frame, or (in the case of [offset, length] and 
-  # range insertions) another ExtInd with the same frame, format, and nil_value.
+  # range insertions) another ExternalIndex with the same frame, format, and nil_value.
   #--
   # TODO -- cleanup error messages so they are more meaningful 
   # and helpful, esp for frame errors
@@ -451,29 +419,11 @@ class ExtInd < External::Base
         raise IndexError.new("negative length (#{length})") if length < 0
         
         # arrayify value if needed
-        unless value.kind_of?(ExtInd)
+        unless value.kind_of?(ExternalIndex)
           value = [value] unless value.kind_of?(Array)
         end
         
         case
-        when cached?
-          # validation must occur here, because this cached insertion
-          # bypasses the validations that normally occur in write
-          case value
-          when Array then validate_framed_array(value)
-          when ExtInd then validate_index(value)
-          end
-          
-          # must be done before padding in case value == self
-          # WARN - could be expensive 
-          # TODO - check the effect of cache.dup on speed if cached?
-          value = value.to_a.collect {|item| item == nil ? nil_value : item }
-          
-          # pad as needed
-          pad_to(index) if index > self.length
-          
-          # write the value to the cache
-          cache[index, length] = value
         when self == value
           # special case when insertion is self (no validation needed)
           # A whole copy of self is required because the insertion 
@@ -501,7 +451,7 @@ class ExtInd < External::Base
           write(value, index)
         else
           # range insertion: requires copy and rewrite of the tail 
-          # of the ExtInd, after the insertion.
+          # of the ExternalIndex, after the insertion.
           # WARN - can be slow when the tail is large
           copy_beg = (index + length) * frame_size
           copy_end = io.length
@@ -553,7 +503,7 @@ class ExtInd < External::Base
 
   # Removes all elements from _self_.
   def clear
-    cached? ? cache.clear : io.truncate(0)
+    io.truncate(0)
     self
   end
 
@@ -575,7 +525,7 @@ class ExtInd < External::Base
   # end
 
   # Appends the entries in another to self.  Another may be an array
-  # of entries (in frame), or another ExtInd with corresponding 
+  # of entries (in frame), or another ExternalIndex with corresponding 
   # index_attrs.
   #
   # <em>potentially expensive</em> especially if another is very 
@@ -585,17 +535,11 @@ class ExtInd < External::Base
     case another
     when Array
       write(another, length)
-    when ExtInd 
+    when ExternalIndex 
       validate_index(another)
-      
-      if cached?
-        # WARN - could be expensive
-        cache.concat(another.to_a)
-      else
-        io.concat(another.io)
-      end
+      io.concat(another.io)
     else 
-      raise TypeError.new("can't convert #{another.class} into ExtInd or Array")
+      raise TypeError.new("can't convert #{another.class} into ExternalIndex or Array")
     end
     self
   end
@@ -705,7 +649,7 @@ class ExtInd < External::Base
 
   # Returns the number of entries in self
   def length
-    cached? ? cache.length : io.length/frame_size
+    io.length/frame_size
   end
 
   # Returns the number of non-nil entries in self. Nil entries  
@@ -796,11 +740,9 @@ class ExtInd < External::Base
   # Converts self to an array, or returns the cache if cached?.
   def to_a
     case
-    when cached? then cache.dup
     when length == 0 then []
     when length == 1 then [read(length, 0)]
-    else
-      read(length, 0)
+    else read(length, 0)
     end
   end
 
@@ -852,7 +794,7 @@ class ExtInd < External::Base
   # an array).  Positions can be set beyond the actual length
   # of the index (similar to an IO).
   #
-  #   i = ExtInd[[1],[2],[3]]
+  #   i = ExternalIndex[[1],[2],[3]]
   #   i.length                      # => 3
   #   i.pos = 2; i.pos              # => 2
   #   i.pos = -1; i.pos             # => 2
@@ -866,23 +808,19 @@ class ExtInd < External::Base
     # do something fake for caching so that 
     # the position need not be set (this 
     # works either way)
-    if cached? 
-      self.cache_pos = pos
-    else
-      io.pos = (pos * frame_size)
-    end
+    io.pos = (pos * frame_size)
   end
   
   # Returns the current position of the index
   def pos
-    cached? ? cache_pos : io.pos/frame_size
+    io.pos/frame_size
   end
 
   # Reads the packed byte string for n entries from the specified 
   # position. By default reads the string for all remaining entries
   # from the current position.
   # 
-  #   i = ExtInd[[1],[2],[3]]
+  #   i = ExternalIndex[[1],[2],[3]]
   #   i.pos                              # => 0
   #   i.readbytes.unpack("I*")           # => [1,2,3]
   #   i.readbytes(1,0).unpack("I*")      # => [1]
@@ -896,11 +834,6 @@ class ExtInd < External::Base
   #   i.readbytes                        # => ""
   #   i.readbytes(1)                     # => nil
   def readbytes(n=nil, pos=nil)
-    if cached?
-      ary = read(n, pos)  
-      return (ary == nil ? nil : ary.flatten.pack(format))
-    end
-  
     # set the io position to the specified index
     self.pos = pos unless pos == nil
 
@@ -938,7 +871,7 @@ class ExtInd < External::Base
   # Single entries are returned in frame, multiple entries 
   # are returned in an array.
   #
-  #   i = ExtInd[[1],[2],[3]]
+  #   i = ExternalIndex[[1],[2],[3]]
   #   i.pos                       # => 0
   #   i.read                      # => [[1],[2],[3]]
   #   i.read(1,0)                 # => [1]
@@ -952,18 +885,6 @@ class ExtInd < External::Base
   #   i.read                      # => []
   #   i.read(1)                   # => nil       
   def read(n=nil, pos=nil)
-    if cached?
-      self.pos = pos unless pos == nil
-      m = (n == nil || n > (length - cache_pos)) ? (length - cache_pos) : n
-      
-      return case 
-      when n == nil && m == 0 then []
-      when m <= 1 then cache[cache_pos] 
-      else
-        cache[cache_pos, m]
-      end
-    end
-    
     str = readbytes(n, pos)
     str == nil ? nil : unpack(str)
   end
@@ -973,13 +894,13 @@ class ExtInd < External::Base
   # current position.  The array can have multiple entries
   # so long as each is in the correct frame.
   #
-  #   i = ExtInd[]
+  #   i = ExternalIndex[]
   #   i.write([[2],[3]], 1)
   #   i.pos = 0; 
   #   i.write([[1]])
   #   i.read(3, 0)                # => [[1],[2],[3]]
   #
-  # write may accept another ExtInd with corresponding
+  # write may accept another ExternalIndex with corresponding
   # index_attrs.
   #
   # Note! -- for performance reasons write does 
@@ -997,12 +918,12 @@ class ExtInd < External::Base
       validate_framed_array(array)
       prepare_write_to_pos(pos)
       write_framed_array(array)
-    when ExtInd
+    when ExternalIndex
       validate_index(array)
       prepare_write_to_pos(pos)
       write_index(array)
     else  
-      raise ArgumentError.new("could not convert #{array.class} to Array or ExtInd")
+      raise ArgumentError.new("could not convert #{array.class} to Array or ExternalIndex")
     end
   end
   
@@ -1011,7 +932,7 @@ class ExtInd < External::Base
   # so long as the total number of elements is divisible 
   # into entries of the correct frame.
   #
-  #   i = ExtInd[]
+  #   i = ExternalIndex[]
   #   i.unframed_write([2,3], 1)
   #   i.pos = 0; 
   #   i.unframed_write([1])
@@ -1023,12 +944,12 @@ class ExtInd < External::Base
       validate_unframed_array(array)
       prepare_write_to_pos(pos)
       write_unframed_array(array)
-    when ExtInd
+    when ExternalIndex
       validate_index(array)
       prepare_write_to_pos(pos)
       write_index(array)
     else  
-      raise ArgumentError.new("could not convert #{array.class} to Array or ExtInd")
+      raise ArgumentError.new("could not convert #{array.class} to Array or ExternalIndex")
     end
   end
   
@@ -1049,17 +970,13 @@ class ExtInd < External::Base
   def pad_to(pos) # :nodoc:
     n = (pos-length)/frame
       
-    if cached?
-      cache.concat(Array.new(n, nil_value))
-    else
-      io.pos = io.length
-      io.length += io.write(nil_value(false) * n) 
-        
-      # in this case position doesn't 
-      # need to be set.  set pos to nil
-      # to skip the set statement below
-      pos = nil
-    end
+    io.pos = io.length
+    io.length += io.write(nil_value(false) * n) 
+      
+    # in this case position doesn't 
+    # need to be set.  set pos to nil
+    # to skip the set statement below
+    pos = nil
   end
 
   def validate_index(index) # :nodoc:
@@ -1101,83 +1018,52 @@ class ExtInd < External::Base
   end
   
   def write_index(index) # :nodoc:
-    if cached?
-      if index.cached?
-        cache[cache_pos, index.length] = index.cache
-        self.cache_pos += index.length
-      else
-        index.each do |item|
-          cache[cache_pos] = item
-          self.cache_pos += 1
-        end
-      end
-    else
-      end_pos = io.pos
-      if index.cached?
-        end_pos += io.write( index.cache.pack(format) )
-      else
-        end_pos += io.insert(index.io)
-      end
-      
-      io.length = end_pos if end_pos > io.length
-    end
+    end_pos = io.pos + io.insert(index.io)
+    io.length = end_pos if end_pos > io.length
   end
   
   def write_framed_array(array) # :nodoc:
     # framed arrays may contain nils, and must
     # be resolved before writing the data
     
-    if cached?
-      cache[cache_pos, array.length] = array.collect {|item| item == nil ? nil_value : item }
-      self.cache_pos += array.length
-    else
-      start_pos = io.pos
-      length_written = 0
-      
-      if process_in_bulk
-        arr = []
-        array.each {|item| arr.concat(item == nil ? nil_value : item) }
-        length_written += io.write(arr.pack(format))
-      else
-        array.each do |item|
-          str = (item == nil ? nil_value(false) : item.pack(format))
-          length_written += io.write(str)
-        end
-      end
+    start_pos = io.pos
+    length_written = 0
     
-      end_pos = start_pos + length_written
-      io.length = end_pos if end_pos > io.length
+    if process_in_bulk
+      arr = []
+      array.each {|item| arr.concat(item == nil ? nil_value : item) }
+      length_written += io.write(arr.pack(format))
+    else
+      array.each do |item|
+        str = (item == nil ? nil_value(false) : item.pack(format))
+        length_written += io.write(str)
+      end
     end
+  
+    end_pos = start_pos + length_written
+    io.length = end_pos if end_pos > io.length
   end
   
   def write_unframed_array(array) # :nodoc:
     # unframed arrays cannot contain nils
     
-    if cached?
-      array.each_slice(frame) do |item|
-        cache[cache_pos] = item
-        self.cache_pos += 1
-      end
-    else
-      start_pos = io.pos
-      length_written = 0
-      
-      if process_in_bulk
-        length_written += io.write(array.pack(format))
-      else
-        array.each_slice(frame) do |arr|
-          length_written += io.write(arr.pack(format))
-        end
-      end
+    start_pos = io.pos
+    length_written = 0
     
-      end_pos = start_pos + length_written
-      io.length = end_pos if end_pos > io.length
+    if process_in_bulk
+      length_written += io.write(array.pack(format))
+    else
+      array.each_slice(frame) do |arr|
+        length_written += io.write(arr.pack(format))
+      end
     end
+  
+    end_pos = start_pos + length_written
+    io.length = end_pos if end_pos > io.length
   end
 end
 
-
-# # Include the inline enhancements for ExtInd
+# # Include the inline enhancements for ExternalIndex
 # if RUBY_PLATFORM.index('mswin').nil?
 #   require 'inline'
 #   inline do |builder|
