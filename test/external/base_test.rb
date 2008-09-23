@@ -39,7 +39,7 @@ class BaseTest < Test::Unit::TestCase
       b = Base.new(nil)
       assert b.io != nil
       assert_equal Tempfile, b.io.class
-      assert b.io.path =~ Regexp.new("^" + Dir.tmpdir)
+      assert_equal 0, b.io.path.index(Dir.tmpdir)
     ensure
       b.close if b
     end

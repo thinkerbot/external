@@ -1,9 +1,20 @@
 module External
   
   # The Chunkable mixin provides methods for organizing a span or range
-  # into chunks no larger than a specified block size. 
+  # into chunks no larger than a specified block size. For reference:
+  #
+  #   span    an array like: [start, length]
+  #   range   a Range like: start..end or start...(end - 1)
+  #
   module Chunkable
-    attr_accessor :length, :default_blksize
+    
+    # The length of the chunkable object; 
+    # length must be set by the object.
+    attr_accessor :length
+    
+    # The default block size for chunking a chunkable
+    # object; default_blksize must be set by the object.
+    attr_accessor :default_blksize
     
     # Returns the default span: [0, length]
     def default_span
@@ -79,11 +90,24 @@ module External
       [begin_range, length]
     end
     
+    # The compliment to split_range; returns the span with a negative
+    # start index counted back from self.length.
+    #
+    #   length                # => 10
+    #   split_span([0, 10])   # => [0,10]
+    #   split_span([-1, 1])   # => [9,1]
+    #
     def split_span(span)
       span[0] += self.length if span[0] < 0
       span
     end
     
+    # Returns the begining and end of a range or span.
+    # 
+    #   range_begin_and_end(0..10)    # => [0, 10]
+    #   range_begin_and_end(0...10)   # => [0, 9]
+    #   range_begin_and_end([0, 10])  # => [0, 10]
+    #
     def range_begin_and_end(range_or_span)
       rbegin, rend = range_or_span.kind_of?(Range) ? split_range(range_or_span) : split_span(range_or_span)
       raise ArgumentError.new("negative offset specified: #{PP.singleline_pp(range_or_span,'')}") if rbegin < 0
@@ -94,6 +118,8 @@ module External
 
     private
     
+    # a utility method to collect the results of a method
+    # that requires a block.
     def collect_results(method, args) # :nodoc:
       results = []
       send(method, args) do |*result|

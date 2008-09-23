@@ -28,60 +28,6 @@ class ChunkableTest < Test::Unit::TestCase
   end
   
   #
-  # split_range 
-  #
-  
-  def test_split_range_doc
-    assert_equal 10, length
-    assert_equal [0,10], split_range(0..10) 
-    assert_equal [0,9], split_range(0...10) 
-    assert_equal [9,1], split_range(-1..10) 
-    assert_equal [0,9], split_range(0..-1)
-  end
-  
-  def test_split_range
-    {
-      0..100 => [0,100],
-      0...100 => [0, 99],
-      1..100 => [1,99],
-      1...100 => [1,98]
-    }.each_pair do |range, expected|
-      assert_equal expected, split_range(range), range
-    end
-  end
-  
-  def test_split_range_for_negative_indicies_counts_back_from_length
-    assert_equal 10, length
-    {
-      # for begin index
-      -1..100 => [9,91],  # equivalent to 9..100
-      -1...100 => [9,90],
-      -2..100 => [8,92],
-      -2...100 => [8,91],
-      -11..100 => [-1,101],
-      -11...100 => [-1,100],
-      
-      # for end index
-      0..-1 => [0,9],  # equivalent to 0..9
-      0...-1 => [0,8],
-      0..-10 => [0,0]
-    }.each_pair do |range, expected|
-      assert_equal expected, split_range(range), range
-    end
-  end
-  
-  def test_split_range_for_zero_cases
-    {
-      0..0 => [0,0],
-      0...0 => [0,-1],
-      -0..-0 => [0,0],
-      -0...-0 => [0,-1]
-    }.each_pair do |range, expected|
-      assert_equal expected, split_range(range), range
-    end
-  end
-  
-  #
   # chunk tests
   #
   
@@ -178,4 +124,79 @@ class ChunkableTest < Test::Unit::TestCase
       
     assert_equal [[200,100],[100,100],[0,100]], results
   end
+  
+  #
+  # split_range 
+  #
+  
+  def test_split_range_doc
+    assert_equal 10, length
+    assert_equal [0,10], split_range(0..10) 
+    assert_equal [0,9], split_range(0...10) 
+    assert_equal [9,1], split_range(-1..10) 
+    assert_equal [0,9], split_range(0..-1)
+  end
+  
+  def test_split_range
+    {
+      0..100 => [0,100],
+      0...100 => [0, 99],
+      1..100 => [1,99],
+      1...100 => [1,98]
+    }.each_pair do |range, expected|
+      assert_equal expected, split_range(range), range
+    end
+  end
+  
+  def test_split_range_for_negative_indicies_counts_back_from_length
+    assert_equal 10, length
+    {
+      # for begin index
+      -1..100 => [9,91],  # equivalent to 9..100
+      -1...100 => [9,90],
+      -2..100 => [8,92],
+      -2...100 => [8,91],
+      -11..100 => [-1,101],
+      -11...100 => [-1,100],
+      
+      # for end index
+      0..-1 => [0,9],  # equivalent to 0..9
+      0...-1 => [0,8],
+      0..-10 => [0,0]
+    }.each_pair do |range, expected|
+      assert_equal expected, split_range(range), range
+    end
+  end
+  
+  def test_split_range_for_zero_cases
+    {
+      0..0 => [0,0],
+      0...0 => [0,-1],
+      -0..-0 => [0,0],
+      -0...-0 => [0,-1]
+    }.each_pair do |range, expected|
+      assert_equal expected, split_range(range), range
+    end
+  end
+  
+  #
+  # split_span test
+  #
+  
+  def test_split_span_documentation
+    assert_equal 10, length
+    assert_equal [0,10], split_span([0, 10])
+    assert_equal [9,1], split_span([-1, 1])
+  end
+  
+  #
+  # range_begin_and_end test
+  #
+  
+  def test_range_begin_and_end_documentation
+    assert_equal [0, 10], range_begin_and_end(0..10)
+    assert_equal [0, 9], range_begin_and_end(0...10)
+    assert_equal [0, 10], range_begin_and_end([0, 10])
+  end
+  
 end
