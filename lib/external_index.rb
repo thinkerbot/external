@@ -1,10 +1,13 @@
 require 'external/base'
-
-# for some reason this is sometimes not required by String 
-# automatically, leading to a missing each_char method
-#require 'jcode'  
 require 'strscan'
 
+# Provides array-like access to index data kept on disk.  Index data is
+# defined by a packing format (see Array#pack) like 'II', which would 
+# represent two integers; in this case each member of the ExternalIndex
+# would be a two-integer array.  
+#
+# All directives except '@' and 'X' are allowed, in any combination. 
+#
 #--
 # not implemented --
 # dclone, flatten, flatten!, frozen?, pack, quote, to_yaml, transpose, yaml_initialize
@@ -14,45 +17,28 @@ require 'strscan'
 # In addition, note that length must be adjusted manually in most io operations (truncate is
 # the exception).  Thus if you change the file length by any means, the file length must be
 # reset.
-#
-# ExternalIndex allows array-like access to formatted binary data stored on disk.  
-#   
-# == Caching
-#
-# To improve peformance, ExternalIndex can be run in a cached mode where the data is loaded into
-# memory and kept in memory until the ExternalIndex closes (or is flushed).  Cached mode is 
-# recommended for all but the largest index files, which cannot or should not be loaded
-# into memory.  
-#++
-
-#--
-# BUGS
-# - cached mode does not check that inputs are valid... so you can add in 
-#   strings and other such nonsense: ExternalIndex["cat", "dog", "mouse", {:cached => true}]
-#++
-
-
-# Provides array-like access to index data kept on disk.  Index data is
-# defined by a packing format (see Array#pack) like 'II', which would 
-# represent two integers; in this case each member of the ExternalIndex
-# would be a two-integer array.  
-#
-# All directives except '@' and 'X' are allowed, in any combination. 
-#
 class ExternalIndex < External::Base
   
   class << self
-    def [](*args)
-      options = args.last.kind_of?(Hash) ? args.pop : {}
-      ab = self.new(nil, options)
-      normalized_args = args.collect {|item| item.nil? ? ab.nil_value : item }.flatten
-      ab.unframed_write(normalized_args)
+    
+    # Initializes a new ExternalIndex using an array-like [] syntax.
+    # The last argument may be an options hash (this is ok since
+    # ExternalIndex cannot store a Hash anyhow).
+    def [](*argv)
+      options = argv.last.kind_of?(Hash) ? argv.pop : {}
+      index = new(nil, options)
+      
+      normalized_args = argv.collect do |item| 
+        item.nil? ? index.nil_value : item
+      end.flatten
+      index.unframed_write(normalized_args)
       
       # reset the position of the IO under this initialize
-      ab.pos = 0
-      ab
+      index.pos = 0
+      index
     end
     
+    # Opens and reads the file into an array.
     def read(fd, options={})
       return [] if fd.nil?
       open(fd, "r", options) do |index|
@@ -94,8 +80,6 @@ class ExternalIndex < External::Base
       Array.new(frame, 0)
     end
   end
-  
-  include External::Chunkable
   
   # The format of the indexed data.  Format may be optimized from 
   # the original input format in cases like 'III' where bulk
@@ -296,16 +280,13 @@ class ExternalIndex < External::Base
     
     case another
     when Array
-      return false unless self.length == another.length
+      return false if self.length != another.length
       self.to_a == another
+      
     when ExternalIndex
-      return false unless self.length == another.length
-
-      return false unless self.index_attrs == another.index_attrs
-      if (self.io.sort_compare(another.io, (buffer_size/2).ceil)) == 0
-        return true
-      end
-
+      return false if self.length != another.length || self.index_attrs != another.index_attrs
+      return true  if (self.io.sort_compare(another.io, (buffer_size/2).ceil)) == 0
+ 
       self.to_a == another.to_a
     else
       false
@@ -351,8 +332,7 @@ class ExternalIndex < External::Base
       case 
       when length == nil then read(1, index)    # read one, as index[0]
       when length == 1 then [read(1, index)]    # read one framed, as index[0,1]
-      else
-        read(length, index)                     # read length, automatic framing
+      else read(length, index)                  # read length, automatic framing
       end 
       
     when Range
@@ -1062,58 +1042,3 @@ class ExternalIndex < External::Base
     io.length = end_pos if end_pos > io.length
   end
 end
-
-# # Include the inline enhancements for ExternalIndex
-# if RUBY_PLATFORM.index('mswin').nil?
-#   require 'inline'
-#   inline do |builder|
-#     #builder.include "<rubyio.h>"
-#     # Array.new(str.length/frame_size) do |i|
-#     #     str[i*frame_size, frame_size].unpack(format)
-#     #   end
-#     builder.c %Q{
-#       static VALUE unpack(VALUE str)
-#       {
-#         char *p = RSTRING(str)->ptr;
-#         int str_len = RSTRING(str)->len; 
-#         int frame_size = NUM2INT(rb_iv_get(self, "@frame_size")); 
-#         int frame = NUM2INT(rb_iv_get(self, "@frame")); 
-#         int i, j, times = str_len/frame_size;
-#         VALUE fmt = rb_iv_get(self, "@format"); 
-#         VALUE results, arr;
-# 
-#         if(times <= 1)
-#           return rb_funcall(str, rb_intern("unpack"), 1, fmt);
-# 
-#         results = rb_ary_new();
-#         i = 0;
-#         while(i < times)
-#         {
-#           j = 0;
-#           arr = rb_ary_new();
-#           while(j < frame)
-#           {
-#             // no need to copy the data at *p,
-#                 // apparently the conversion can 
-#                 // happen directly from the pointer
-#                 rb_ary_push(arr, UINT2NUM(*p));
-#                 p += 4;
-#        
-#             
-#             ++j;
-#           }
-# 
-#           rb_ary_push(results, arr);
-#           ++i;
-#         }
-#         return results;
-#       }    
-#       
-#     }#File.read(File.dirname(__FILE__) + "/../../src/inline.c")
-#   end
-# else
-#   # on windows when it's not likely that the user has
-#   # a compiler, include the precompiled binaries
-#   # require ...
-# end
-

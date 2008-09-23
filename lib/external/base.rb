@@ -1,8 +1,3 @@
-# For some inexplicable reason yaml MUST be required before
-# tempfile in order for ExtArrTest::test_LSHIFT to pass.
-# Otherwise it fails with 'TypeError: allocator undefined for Proc'
-
-require 'yaml'
 require 'external/enumerable'
 require 'external/io'
 
@@ -36,6 +31,7 @@ module External
     end
     
     include External::Enumerable  
+    include External::Chunkable
     
     # The underlying io for self.
     attr_reader :io
@@ -74,8 +70,6 @@ module External
     end
     
     protected
-    
-    include External::Chunkable
     
     # Sets io and extends the input io with Io.
     def io=(io)
