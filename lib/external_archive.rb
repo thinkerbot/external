@@ -1,6 +1,5 @@
 require 'external/base'
-require 'ext_ind'
-require 'strscan'
+require 'external_index'
 
 #--
 #  later separate out individual objects logically
@@ -24,7 +23,11 @@ require 'strscan'
 #  -  b ALWAYS on with Windows
 #++
 
-class ExtArc < External::Base
+# ExternalArchive provides array-like access to archival data stored on disk.
+# ExternalArchives consist of an IO object and an index of [position, length]
+# pairs which indicate the start position and length of entries in the IO.
+# 
+class ExternalArchive < External::Base
   class << self
     def [](*args)
       ab = self.new
@@ -32,99 +35,68 @@ class ExtArc < External::Base
       ab
     end
     
-    def default_index_filepath(filepath)
-      filepath.chomp(File.extname(filepath)) + '.index'
+    def default_index_filepath(path)
+      path.chomp(File.extname(path)) + '.index'
     end
   end
   
-  attr_reader :_index
+  # The underlying index of [position, length] arrays
+  # indicating where entries in the io are located.
+  attr_reader :io_index
 
-  def initialize(io=nil, options={})
+  def initialize(io=nil, io_index=[])
     super(io)
-    
-    @_index = nil
-    index_options = {
-      :format => 'II', 
-      :nil_value => [0,0], 
-      :cached => options.has_key?(:cache_index) ? options[:cache_index] : true}
-    initialize_index(options[:index], index_options)
+    @io_index = io_index
   end
   
-  def closed?
-    super && (!_index.respond_to?(:close) || _index.closed?)
-  end
-  
-  def close(path=nil, index_path=nil)
-    if path != nil && index_path == nil
-      index_path = self.class.default_index_filepath(path) 
-    end
-    
-    _index.close(index_path)
-    super(path)
-  end
-  
-  def options
-    { :index => (_index.cached? ? _index.cache : _index.io.path),
-      :cache_index => _index.cached?}
-  end
-  
-  # Returns another ExtArc, cached if self is cached.
+  # Returns another instance of self.class; the new 
+  # instance will have an io_index of the same class
+  # as the current io_index.
   def another
-    self.class.new(nil, :cache_index => _index.cached?)
+    self.class.new(nil, io_index.class.new)
   end
 
   protected
   
-  # Set the index.  The index may be:
-  # - An existing ExtInd (specified index options are ignored)
-  # - An io, filepath, or nil
-  #
-  # In the latter cases the input is used to initialize an ExtInd
-  # with the specified index options.  If nil is provided, and the
-  # ExtArc io is a file, then the index will be initialized to the 
-  # default_index_filepath for the file.
-  #
-  def initialize_index(index, index_options) 
-    raise "index already initialized" unless @_index == nil
-    
-    @_index = case index
-    when String, nil
-      if io.kind_of?(File)
-        index = self.class.default_index_filepath(io.path) if index == nil
-        FileUtils.touch(index) unless File.exists?(index)
-      end
-
-      ExtInd.open(index, "r+", index_options)
-    when Array 
-      index << index_options
-      ExtInd[*index]
-    when ExtInd then index
-    else
-      # assume index is a kind of io and try to open it
-      ExtInd.new(index, index_options)
-    end
-  end
-  
-  def reset_index
-    _index.clear
-    io.flush unless io.generic_mode == "r"
-    io.rewind
-    yield(_index) if block_given?
-    self
-  end
-  
-  def array_to_pl(array)
+  # Converts an io_index entry to a position and length; provided as 
+  # a hook to interface with an io_index that does not directly keep 
+  # an array of [position, length] values.
+  def io_entry_to_pos_length(array)
     array
   end
   
-  def pl_to_array(pos, length, str=nil)
+  # Converts a position and length to and io_index entry; provided as 
+  # a hook to interface with an io_index that does not directly keep 
+  # an array of [position, length] values.
+  def pos_length_to_io_entry(pos, length)
     [pos, length]
   end
   
   public
   
-  alias reindex reset_index
+  # Converts an string read from io into an entry.  By default
+  # the string is simply returned.
+  def str_to_entry(str)
+    str
+  end
   
+  # Converts an entry into a string.  By default this method
+  # returns entry.to_s.
+  def entry_to_str(entry)
+    entry.to_s
+  end
+  
+  # Clears the io_index, and yields io and the io_index to the
+  # block for reindexing.  The io is flushed and rewound before
+  # being yielded to the block.  Returns self
+  def reindex
+    io_index.clear
+    io.flush
+    io.rewind
+    yield(io, io_index)
+    self
+  end
+
   # The speed of reindex_by_regexp is dictated by how fast the underlying
   # code can match the pattern.  Under ideal conditions (ie a very simple 
   # regexp), it will be as fast as reindex_by_sep.
@@ -135,7 +107,7 @@ class ExtArc < External::Base
       :carryover_limit => 8388608
     }.merge(options)
     
-    reset_index do |index|
+    reindex do |io, index|
       span = options[:range_or_span] || io.default_span
       blksize = options[:blksize]
       carryover_limit = options[:carryover_limit]
@@ -145,7 +117,7 @@ class ExtArc < External::Base
         while advanced = scanner.search_full(pattern, true, false)
           break unless advanced > 0
             
-          index.unframed_write pl_to_array(scan_pos, advanced)
+          index << pos_length_to_io_entry(scan_pos, advanced)
           scan_pos += advanced 
         end
         
@@ -180,8 +152,8 @@ class ExtArc < External::Base
     when !entry_follows_sep && exclude_sep then 3
     end
     
-    reset_index do |index|
-      # calculate default span after reset_index in case any flush needs to happen
+    reindex do |io, index|
+      # calculate default span after resetio_index in case any flush needs to happen
       span = options[:range_or_span] || io.default_span
       blksize = options[:blksize]
       carryover_limit = options[:carryover_limit]
@@ -202,14 +174,12 @@ class ExtArc < External::Base
         while advanced = scanner.skip_until(regexp)
         
           # adjust indicies as needed...
-          arr = case mode
-          when 0 then pl_to_array(scan_pos, advanced)
-          when 2 then pl_to_array(scan_pos-sep_length, advanced)
-          else
-            pl_to_array(scan_pos, advanced-sep_length)
+          io_index << case mode
+          when 0 then pos_length_to_io_entry(scan_pos, advanced)
+          when 2 then pos_length_to_io_entry(scan_pos-sep_length, advanced)
+          else pos_length_to_io_entry(scan_pos, advanced-sep_length)
           end
           
-          _index.unframed_write(arr)
           scan_pos += advanced
         end
         
@@ -222,23 +192,13 @@ class ExtArc < External::Base
       # doesn't get scanned when the entry follows the separator.  
       # Add the entry here.
       if entry_follows_sep && io.length != 0
-        arr = if exclude_sep
-          pl_to_array(io.length - remainder, remainder)
+        io_index << if exclude_sep
+          pos_length_to_io_entry(io.length - remainder, remainder)
         else
-          pl_to_array(io.length - remainder - sep_length, remainder + sep_length)
+          pos_length_to_io_entry(io.length - remainder - sep_length, remainder + sep_length)
         end
-        
-        _index.unframed_write(arr)
       end   
     end
-  end
-
-  def str_to_entry(str)
-    str
-  end
-  
-  def entry_to_str(entry)
-    entry.to_s
   end
   
   ###########################
@@ -280,7 +240,7 @@ class ExtArc < External::Base
     when ExtArr
       # if indexes are equal, additional 
       # 'quick' comparisons are allowed 
-      if self._index == another._index
+      if self.io_index == another.io_index
         
         # equal in comparison if the ios are equal
         return 0 if self.io.quick_compare(another.io)
@@ -313,16 +273,17 @@ class ExtArc < External::Base
       # compare arrays
       self.to_a == another
 
-    when ExtArr
+    when ExternalArchive
       # test simply based on length
       return false unless self.length == another.length
       
       # if indexes are equal, additional 
       # 'quick' comparisons are allowed 
-      if self._index == another._index
+      if self.io_index == another.io_index
            
         # equal in comparison if the ios are equal
-        return true if (self.io.sort_compare(another.io, (self._index.buffer_size/2).ceil)) == 0
+        #, (self.io_index.buffer_size/2).ceil) ??
+        return true if self.io.sort_compare(another.io) == 0
       end
 
       # compare arrays
@@ -333,15 +294,15 @@ class ExtArc < External::Base
   end
   
   def [](input, length=nil)
-    # two call types are required because while ExtInd can take 
+    # two call types are required because while ExternalIndex can take 
     # a nil length, Array cannot and index can be either
-    entries = (length == nil ? _index[input] : _index[input, length])
+    entries = (length == nil ? io_index[input] : io_index[input, length])
     
     # for conformance with array range retrieval
     return entries if entries.nil? || entries.empty?
 
     if length == nil && !input.kind_of?(Range)
-      epos, elen = array_to_pl(entries)
+      epos, elen = io_entry_to_pos_length(entries)
       
       # single entry, just read it
       io.pos = epos
@@ -349,7 +310,7 @@ class ExtArc < External::Base
     else
       pos = nil
       entries.collect do |array|
-        epos, elen = array_to_pl(array)
+        epos, elen = io_entry_to_pos_length(array)
         
         # only set io position if necessary
         unless pos == epos
@@ -386,14 +347,14 @@ class ExtArc < External::Base
     
     if args.length == 2
 
-      #value = self.to_a if value.kind_of?(ExtInd)
+      #value = self.to_a if value.kind_of?(ExternalIndex)
       
       # write entry to io first as a check
       # that io is open for writing.
       elen = io.write( entry_to_str(value) )
       io.length += elen
 
-      self._index[index] = pl_to_array(epos, elen, value)
+      self.io_index[index] = pos_length_to_io_entry(epos, elen, value)
   
     else
       indicies = []
@@ -417,13 +378,13 @@ class ExtArc < External::Base
 
       values.each do |value|
         elen = io.write( entry_to_str(value) )
-        indicies << pl_to_array(epos, elen, value)
+        indicies << pos_length_to_io_entry(epos, elen, value)
         
         io.length += elen
         epos += elen
       end
       
-      self._index[index, length] = indicies
+      self.io_index[index, length] = indicies
     end
   end
 
@@ -443,7 +404,7 @@ class ExtArc < External::Base
   # Removes all elements from _self_.
   def clear
     io.truncate(0)
-    _index.clear
+    io_index.clear
     self
   end
 
@@ -491,8 +452,8 @@ class ExtArc < External::Base
     # tracking the position using a local variable 
     # is faster than calling io.pos.  
     pos = nil
-    _index.each do |array|
-      epos, elen = array_to_pl(array)
+    io_index.each do |array|
+      epos, elen = io_entry_to_pos_length(array)
       
       # only set io position if necessary
       unless pos == epos
@@ -518,7 +479,7 @@ class ExtArc < External::Base
   end
   
   # Same as each, but passes the index of the element instead of the element itself.
-  def each_index(&block) # :yield: index
+  def eachio_index(&block) # :yield: index
     0.upto(length-1, &block)
     self
   end
@@ -606,14 +567,14 @@ class ExtArc < External::Base
   
   # Returns the number of entries in self
   def length 
-    _index.length
+    io_index.length
   end
   
   # Returns the number of non-nil elements in self. May be zero.
   def nitems
     count = self.length
-    _index.each do |array|
-      epos, elen = array_to_pl(array)
+    io_index.each do |array|
+      epos, elen = io_entry_to_pos_length(array)
       
       # the logic of this search is that nil,
       # (and only nil ?) can have an entry 
@@ -665,8 +626,8 @@ class ExtArc < External::Base
   # end
   
   def reverse_each_str(&block) # :yield: string
-    _index.reverse_each do |array|
-      epos, elen = array_to_pl(array)
+    io_index.reverse_each do |array|
+      epos, elen = io_entry_to_pos_length(array)
       
       # A more optimized approach would
       # read in a chunk of entries and

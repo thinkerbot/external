@@ -9,7 +9,7 @@ class ExternalIndexTest < Test::Unit::TestCase
   attr_reader :index, :tempfile
 
   def setup
-    # cls represents an array
+    # cls represents Array in many of the tests taken from MRI
     @cls = ExternalIndex
 
     @tempfile = Tempfile.new("indextest")
@@ -79,8 +79,6 @@ class ExternalIndexTest < Test::Unit::TestCase
     assert_equal array.pack(format), tempfile.read
     assert_equal tempfile.path, index.io.path
   end
-  
-  
 
   #
   # ExternalIndex.read test

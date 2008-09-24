@@ -1,71 +1,140 @@
 require File.join(File.dirname(__FILE__), 'external_test_helper.rb') 
-require 'ext_arc'
+require 'external_archive'
 
-class ExtArcTest < Test::Unit::TestCase
-  attr_reader :ea
+class ExternalArchiveTest < Test::Unit::TestCase
+  attr_reader :ea, :data
 
   def setup
-    @ea = ExtArc.new
+    # cls represents Array in many of the tests taken from MRI
+    @cls = ExternalArchive
+    @data = ""
+    @ea = ExternalArchive.new StringIO.new(data)
   end
+  
+  #
+  # another test
+  #
+  
+  def test_another_returns_a_new_instance_with_a_new_io_index
+    a = @cls.new
+    b = a.another
+
+    assert_not_equal(a.object_id, b.object_id)
+    assert_equal(@cls[], b)
+    assert_equal Array, b.io_index.class
+    
+    # now with an ExternalIndex
+    a = @cls.new nil, ExternalIndex.new
+    b = a.another
+
+    assert_not_equal(a.object_id, b.object_id)
+    assert_equal(@cls[], b)
+    assert_equal ExternalIndex, b.io_index.class
+  end
+  
+  #
+  # str_to_entry test
+  #
+  
+  def test_str_to_entry_return_str
+    assert_equal "str", ea.str_to_entry("str")
+    assert_equal "1", ea.str_to_entry("1")
+  end
+  
+  #
+  # entry_to_str test
+  #
+  
+  def test_entry_to_str_returns_entry_to_s
+    assert_equal "str", ea.entry_to_str("str")
+    assert_equal "1", ea.entry_to_str(1)
+  end
+  
+  #
+  # reindex test
+  #
+  
+  def test_reindex_yields_io_and_io_index_to_the_block
+    was_in_block = false
+    ea.reindex do |io, io_index|
+      assert_equal ea.io, io
+      assert_equal ea.io_index, io_index
+      was_in_block = true
+    end
+    
+    assert was_in_block
+  end
+  
+  def test_reindex_clears_io_index
+    ea.io_index << [1,0]
+    assert !ea.io_index.empty?
+    
+    was_in_block = false
+    ea.reindex do |io, io_index|
+      assert io_index.empty?
+      was_in_block = true
+    end
+    
+    assert was_in_block
+  end
+  
+  def test_reindex_rewinds_io
+    ea.io << "str"
+    assert_not_equal 0, ea.io.pos
+    
+    was_in_block = false
+    ea.reindex do |io, io_index|
+      assert_equal 0, ea.io.pos
+      was_in_block = true
+    end
+    
+    assert was_in_block
+  end
+  
+  # def test_reindex_flushes_io
+  # end
   
   #
   # readme doc test
   #
   
-  def test_readme_doc_for_ext_arc
-    arc = ExtArc[">swift", ">brown", ">fox"]
-    assert_equal ">fox", arc[2]
-    assert_equal [">swift", ">brown", ">fox"], arc.to_a
-
-    assert_equal Tempfile, arc.io.class
-    arc.io.rewind
-    assert_equal ">swift>brown>fox", arc.io.read
-
-  	Tempfile.open('test_readme_doc_for_ext_arc') do |file|
-  	  file << ">swift>brown>fox"
-  	  file.flush
-
-  	  arc = ExtArc.new(file)
-  	  assert_equal [], arc.to_a
-  	  arc.reindex_by_sep(">", :entry_follows_sep => true)
-  	  assert_equal [">swift", ">brown", ">fox"], arc.to_a
-  	  
-  	  arc = ExtArc.new(file)
-  	  assert_equal [], arc.to_a
-  	  arc.reindex_by_regexp(/>\w*/)
-  	  assert_equal [">swift", ">brown", ">fox"], arc.to_a
-  	end
-  end
-
-  #
-  # entry_to_str, str_to_entry test
-  #
-
-  def test_entry_to_str_simply_stringifies_entry
-    obj = "abc"
-    assert_equal obj.to_s, ea.entry_to_str(obj)
-    
-    obj = 1
-    assert_equal obj.to_s, ea.entry_to_str(obj)
-  end
+  # def test_readme_doc_for_ext_arc
+  #   arc = ExternalArchive[">swift", ">brown", ">fox"]
+  #   assert_equal ">fox", arc[2]
+  #   assert_equal [">swift", ">brown", ">fox"], arc.to_a
+  # 
+  #   assert_equal Tempfile, arc.io.class
+  #   arc.io.rewind
+  #   assert_equal ">swift>brown>fox", arc.io.read
+  # 
+  #   Tempfile.open('test_readme_doc_for_ext_arc') do |file|
+  #     file << ">swift>brown>fox"
+  #     file.flush
+  # 
+  #     arc = ExternalArchive.new(file)
+  #     assert_equal [], arc.to_a
+  #     arc.reindex_by_sep(">", :entry_follows_sep => true)
+  #     assert_equal [">swift", ">brown", ">fox"], arc.to_a
+  #     
+  #     arc = ExternalArchive.new(file)
+  #     assert_equal [], arc.to_a
+  #     arc.reindex_by_regexp(/>\w*/)
+  #     assert_equal [">swift", ">brown", ">fox"], arc.to_a
+  #   end
+  # end
   
-  def test_entry_to_str_simply_return_input
-    obj = "abc"
-    assert_equal obj.object_id, ea.str_to_entry(obj).object_id
-  end
-  
-  #####################################
-  # indexing tests
-  #####################################
+  #
+  # reindex_by_regexp tests
+  #
   
   def reindex_by_regexp_test(arr, pattern, blksize=nil)
     str = arr.join('')
     StringIO.open(str) do |strio|
-      ea = ExtArc.new(strio)
+      ea = ExternalArchive.new(strio)
       ea.io.default_blksize = blksize unless blksize == nil 
       
       ea.reindex_by_regexp(pattern)
-      yield(str, ea._index.to_a) if block_given?
+      yield(str, ea.io_index.to_a) if block_given?
       
       assert_equal arr, ea.to_a
     end
@@ -93,14 +162,18 @@ class ExtArcTest < Test::Unit::TestCase
     end 
   end
   
+  #
+  # reindex_by_sep tests
+  #
+  
   def reindex_by_sep_test(arr, sep, options={}, blksize=nil)
     str = arr.join('')
     StringIO.open(str) do |strio|
-      ea = ExtArc.new(strio)
+      ea = ExternalArchive.new(strio)
       ea.io.default_blksize = blksize unless blksize == nil 
       
       ea.reindex_by_sep(sep, options)
-      yield(str, ea._index.to_a) if block_given?
+      yield(str, ea.io_index.to_a) if block_given?
       ea.to_a
     end
   end
@@ -126,7 +199,7 @@ class ExtArcTest < Test::Unit::TestCase
       assert_equal [[0,2],[2,2],[4,2]], index
     end
     assert_equal ["a>","b>","c>"], arr
-
+  
     arr = reindex_by_sep_test([">",">",">"], ">", :exclude_sep => true) do |str, index|
       assert_equal ">>>", str
       assert_equal [[0,0],[1,0],[2,0]], index
