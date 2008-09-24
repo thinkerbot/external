@@ -7,48 +7,40 @@ class BaseTest < Test::Unit::TestCase
   
   acts_as_file_test
   
-  attr_reader :array, :base, :tempfile
+  attr_reader :base
 
   def setup
     super
-    @array = ('a'..'z').to_a
-    @tempfile = Tempfile.new("basetest")
-    @tempfile << array.join('')
-    @base = Base.new(@tempfile)
-  end
-  
-  def teardown
-    tempfile.close unless tempfile.closed?
-    super
-  end
-
-  #
-  # setup tests
-  #
-
-  def test_setup
-    assert_equal ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"], array
-    assert_equal "abcdefghijklmnopqrstuvwxyz", array.join('')
-    
-    tempfile.pos = 0
-    assert_equal "abcdefghijklmnopqrstuvwxyz", tempfile.read
+    @base = Base.new
   end
 
   #
   # initialize test
   #
   
-  def test_io_points_to_tempfile_when_io_is_nil
+  def test_base_initializes_io_to_tempfile_when_nil
+    base = Base.new(nil)
+    
     condition_test(:ruby_1_8) do
-      begin
-        b = Base.new(nil)
-        assert b.io != nil
-        assert_equal Tempfile, b.io.class
-        assert_equal 0, b.io.path.index(Dir.tmpdir)
-      ensure
-        b.close if b
-      end
+      assert_equal Tempfile, base.io.class
     end
+    
+    condition_test(:ruby_1_9) do
+      assert_equal File, base.io.class
+    end
+    
+    assert_equal 0, base.io.path.index(Dir.tmpdir)
+  end
+  
+  def test_base_initializes_io_to_a_strio_when_string
+    base = Base.new("abcde")
+    assert_equal StringIO, base.io.class
+    assert_equal "abcde", base.io.string
+  end
+  
+  def test_base_initializes_enumerate_to_a_as_true
+    base = Base.new(nil)
+    assert base.enumerate_to_a
   end
   
   #
@@ -142,4 +134,25 @@ class BaseTest < Test::Unit::TestCase
     
     assert_equal "new content", File.read(target)
   end
+  
+  #
+  # flush test
+  #
+  
+  def test_flush_flushes_io_and_resets_io_length
+    assert_equal 0, base.io.length
+    base.io << "abcde"
+    assert_equal 0, base.io.length
+    
+    base.flush
+    
+    base.io.rewind
+    assert_equal "abcde", base.io.read
+    assert_equal 5, base.io.length
+  end
+  
+  def test_flush_returns_self
+    assert_equal base, base.flush
+  end
+  
 end

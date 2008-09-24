@@ -375,6 +375,8 @@ class ExternalIndexTest < Test::Unit::TestCase
   
   def test_another_returns_new_instance
     a = @cls[1,2,3]
+    a.enumerate_to_a = false
+    
     b = a.another
     
     assert_not_equal(a.object_id, b.object_id)
@@ -383,22 +385,15 @@ class ExternalIndexTest < Test::Unit::TestCase
   
   def test_another_has_same_options_as_self
     a = @cls.new nil, :format => 'ID', :nil_value => [1,2], :buffer_size => 40
+    a.enumerate_to_a = false
+    
     b = a.another
     
     assert_equal 'ID', b.format
     assert_equal [1,2], b.nil_value
     assert_equal 40, b.buffer_size
   end
-  
-  def test_another_uses_override_options
-    a = @cls[1,2,3]
-    a.buffer_size = 10
-    b = a.another :buffer_size => 20
-    
-    assert_equal(10, a.buffer_size)
-    assert_equal(20, b.buffer_size)
-  end
- 
+
   ########################
   # ...
   ########################

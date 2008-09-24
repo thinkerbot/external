@@ -94,26 +94,19 @@ class ExternalArrayTest < Test::Unit::TestCase
   end
   
   def test_initialize_with_existing_file_and_index
-    File.open(ctr.filepath("input.txt")) do |file|
-      ea = ExternalArray.new(file)
-      
+    ExternalArray.open(ctr.filepath("input.txt")) do |ea|
       assert_equal 'input.txt', File.basename(ea.io.path)
       assert_equal string, ea.io.read
       assert_equal index, ea.io_index.to_a
-      
-      ea.close
     end
   end
   
   def test_initialize_load_specified_index_file
-    File.open(ctr.filepath('without_index.txt')) do |file|
-      alt_index = ctr.filepath('input.index')
-      
-      assert File.exists?(alt_index)
-      
-      ea = ExternalArray.new(file, :index => alt_index)
+    alt_index = ctr.filepath('input.index')
+    assert File.exists?(alt_index)
+    
+    ExternalArray.open(ctr.filepath('without_index.txt'), 'r', :index => alt_index) do |ea|
       assert_equal File.read(alt_index).unpack("I*"), ea.io_index.to_a.flatten
-      ea.close
     end
   end
   

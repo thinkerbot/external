@@ -2,7 +2,7 @@ require File.join(File.dirname(__FILE__), 'external_test_helper.rb')
 require 'external_archive'
 
 class ExternalArchiveTest < Test::Unit::TestCase
-  attr_reader :ea, :data
+  attr_reader :extarc, :data
   
   acts_as_file_test
   
@@ -12,7 +12,7 @@ class ExternalArchiveTest < Test::Unit::TestCase
     # cls represents Array in many of the tests taken from MRI
     @cls = ExternalArchive
     @data = ""
-    @ea = ExternalArchive.new StringIO.new(data)
+    @extarc = ExternalArchive.new StringIO.new(data)
   end
   
   #
@@ -25,6 +25,43 @@ class ExternalArchiveTest < Test::Unit::TestCase
   
   def test_index_path_returns_nil_for_nil
     assert_equal nil, ExternalArchive.index_path(nil)
+  end
+  
+  #
+  # cached? test
+  #
+  
+  def test_cached_is_true_if_io_index_is_an_Array
+    assert_equal Array, extarc.io_index.class
+    assert extarc.cached?
+    
+    extarc = ExternalArchive.new nil, ExternalIndex.new
+    assert_equal ExternalIndex, extarc.io_index.class
+    assert !extarc.cached?
+  end
+  
+  #
+  # cache test
+  #
+  
+  def test_set_cache_to_true_converts_ExternalIndex_io_index_to_array
+    extarc = ExternalArchive.new nil, ExternalIndex.new([1,2,3,4].pack("I*"), :format => 'II')
+    assert !extarc.cached?
+    
+    extarc.cache = true
+    assert_equal [[1,2],[3,4]], extarc.io_index
+    assert extarc.cached?
+  end
+  
+  def test_set_cache_to_false_converts_Array_io_index_to_ExternalIndex
+    extarc = ExternalArchive.new nil, [[1,2],[3,4]]
+    assert extarc.cached?
+    extarc.cache = false
+    
+    assert_equal ExternalIndex, extarc.io_index.class
+    assert_equal 'II', extarc.io_index.options[:format]
+    assert_equal [[1,2],[3,4]], extarc.io_index.to_a
+    assert !extarc.cached?
   end
   
   #
@@ -90,7 +127,7 @@ class ExternalArchiveTest < Test::Unit::TestCase
   #
   
   def test_another_returns_a_new_instance_with_a_new_io_index
-    a = @cls.new
+    a = @cls.new nil, []
     b = a.another
 
     assert_not_equal(a.object_id, b.object_id)
@@ -111,8 +148,8 @@ class ExternalArchiveTest < Test::Unit::TestCase
   #
   
   def test_str_to_entry_return_str
-    assert_equal "str", ea.str_to_entry("str")
-    assert_equal "1", ea.str_to_entry("1")
+    assert_equal "str", extarc.str_to_entry("str")
+    assert_equal "1", extarc.str_to_entry("1")
   end
   
   #
@@ -120,8 +157,8 @@ class ExternalArchiveTest < Test::Unit::TestCase
   #
   
   def test_entry_to_str_returns_entry_to_s
-    assert_equal "str", ea.entry_to_str("str")
-    assert_equal "1", ea.entry_to_str(1)
+    assert_equal "str", extarc.entry_to_str("str")
+    assert_equal "1", extarc.entry_to_str(1)
   end
   
   #
@@ -130,9 +167,9 @@ class ExternalArchiveTest < Test::Unit::TestCase
   
   def test_reindex_yields_io_and_io_index_to_the_block
     was_in_block = false
-    ea.reindex do |io, io_index|
-      assert_equal ea.io, io
-      assert_equal ea.io_index, io_index
+    extarc.reindex do |io, io_index|
+      assert_equal extarc.io, io
+      assert_equal extarc.io_index, io_index
       was_in_block = true
     end
     
@@ -140,11 +177,11 @@ class ExternalArchiveTest < Test::Unit::TestCase
   end
   
   def test_reindex_clears_io_index
-    ea.io_index << [1,0]
-    assert !ea.io_index.empty?
+    extarc.io_index << [1,0]
+    assert !extarc.io_index.empty?
     
     was_in_block = false
-    ea.reindex do |io, io_index|
+    extarc.reindex do |io, io_index|
       assert io_index.empty?
       was_in_block = true
     end
@@ -153,12 +190,12 @@ class ExternalArchiveTest < Test::Unit::TestCase
   end
   
   def test_reindex_rewinds_io
-    ea.io << "str"
-    assert_not_equal 0, ea.io.pos
+    extarc.io << "str"
+    assert_not_equal 0, extarc.io.pos
     
     was_in_block = false
-    ea.reindex do |io, io_index|
-      assert_equal 0, ea.io.pos
+    extarc.reindex do |io, io_index|
+      assert_equal 0, extarc.io.pos
       was_in_block = true
     end
     
@@ -204,13 +241,13 @@ class ExternalArchiveTest < Test::Unit::TestCase
   def reindex_by_regexp_test(arr, pattern, blksize=nil)
     str = arr.join('')
     StringIO.open(str) do |strio|
-      ea = ExternalArchive.new(strio)
-      ea.io.default_blksize = blksize unless blksize == nil 
+      extarc = ExternalArchive.new(strio)
+      extarc.io.default_blksize = blksize unless blksize == nil 
       
-      ea.reindex_by_regexp(pattern)
-      yield(str, ea.io_index.to_a) if block_given?
+      extarc.reindex_by_regexp(pattern)
+      yield(str, extarc.io_index.to_a) if block_given?
       
-      assert_equal arr, ea.to_a
+      assert_equal arr, extarc.to_a
     end
   end
   
@@ -243,12 +280,12 @@ class ExternalArchiveTest < Test::Unit::TestCase
   def reindex_by_sep_test(arr, sep, options={}, blksize=nil)
     str = arr.join('')
     StringIO.open(str) do |strio|
-      ea = ExternalArchive.new(strio)
-      ea.io.default_blksize = blksize unless blksize == nil 
+      extarc = ExternalArchive.new(strio)
+      extarc.io.default_blksize = blksize unless blksize == nil 
       
-      ea.reindex_by_sep(sep, options)
-      yield(str, ea.io_index.to_a) if block_given?
-      ea.to_a
+      extarc.reindex_by_sep(sep, options)
+      yield(str, extarc.io_index.to_a) if block_given?
+      extarc.to_a
     end
   end
   

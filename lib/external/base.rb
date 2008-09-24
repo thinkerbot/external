@@ -1,3 +1,10 @@
+# For some inexplicable reason yaml MUST be required before
+# tempfile in order for ExtArrTest::test_LSHIFT to pass.
+# Otherwise it fails with 'TypeError: allocator undefined for Proc'
+ 
+require 'yaml'
+require 'tempfile'
+
 require 'external/enumerable'
 require 'external/io'
 
@@ -44,7 +51,13 @@ module External
     # Creates a new instance of self with the specified io.  If io==nil,
     # a Tempfile initialized to TEMPFILE_BASENAME is used.
     def initialize(io=nil)
-      self.io = (io.nil? ? Tempfile.new(TEMPFILE_BASENAME) : io)
+      self.io = case io
+      when nil then Tempfile.new(TEMPFILE_BASENAME)
+      when String then StringIO.new(io)
+      else io
+      end
+      
+      @enumerate_to_a = true
     end
  
     # True if io is closed.
@@ -88,6 +101,12 @@ module External
       self
     end
     
+    # Returns another instance of self.  Must be
+    # implemented in a subclass.
+    def another
+      raise NotImplementedError
+    end
+    
     protected
     
     # Sets io and extends the input io with Io.
@@ -95,6 +114,6 @@ module External
       io.extend Io unless io.kind_of?(Io)
       @io = io
     end
-
+    
   end
 end

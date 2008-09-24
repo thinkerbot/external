@@ -216,10 +216,10 @@ class ExternalIndex < External::Base
       :buffer_size => buffer_size}
   end
   
-  # Returns another instance of ExternalIndex, initialized with the 
-  # input options merged to the current options of self.
-  def another(overrides={})
-    self.class.new(nil, options.merge(overrides))
+  # Returns another instance of self.class,
+  # initialized with the current options of self.
+  def another
+    self.class.new(nil, options)
   end
 
   ###########################
@@ -234,9 +234,9 @@ class ExternalIndex < External::Base
   #   not_implemented
   # end
   
-  def dup(options=self.options)
+  def dup
     self.flush
-    another(options).concat(self)
+    another.concat(self)
   end
 
   def +(another)
@@ -934,7 +934,7 @@ class ExternalIndex < External::Base
   end
   
   protected
-  
+
   attr_accessor :cache_pos # :nodoc:
    
   def prepare_write_to_pos(pos) # :nodoc:

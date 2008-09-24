@@ -10,6 +10,14 @@ module External
   # to_a:: converts self to an Array
   #
   module Enumerable
+    # Flag indicating whether to enumerate (ie collect,
+    # select, etc) into an array or into an instance
+    # of self.  In most cases enumerating to an array
+    # performs better, but enumerating to another
+    # instance of self may be desired for especially
+    # large collections.
+    attr_accessor :enumerate_to_a
+    
     def all? # :yield: obj
       # WARN -- no tests for this in test_array
       each do |obj|
@@ -28,7 +36,7 @@ module External
     
     def collect # :yield: item
       if block_given?
-        another = self.another
+        another = enumerate_to_a ? [] : self.another
         each do |item|
           another << yield(item)
         end
@@ -89,7 +97,7 @@ module External
     end
     
     def find_all # :yield: obj
-      another = self.another
+      another = enumerate_to_a ? [] : self.another
       each do |item|
         another << item if yield(item)
       end

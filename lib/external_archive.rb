@@ -32,9 +32,9 @@ class ExternalArchive < External::Base
     
     # Array-like constructor for an ExternalArchive.
     def [](*args)
-      archive = self.new
-      archive.concat(args)
-      archive
+      extarc = new
+      extarc.concat(args)
+      extarc
     end
     
     # Returns the default index filepath for path:
@@ -44,7 +44,30 @@ class ExternalArchive < External::Base
     def index_path(path)
       path ? path.chomp(File.extname(path)) + '.index' : nil
     end
+    
+    def open(fd=nil, mode="rb", options={})
+      io_index = ExternalIndex.open(
+        index_path(options[:index] || fd), 
+        mode,  
+        options.merge(:format => 'II'))
+        
+      fd = File.open(fd, mode) unless fd == nil
+      
+      extarc = self.new(fd, io_index)
+      
+      if block_given?
+        begin
+          yield(extarc)
+        ensure
+          extarc.close
+        end
+      else
+        extarc
+      end
+    end
   end
+  
+  # ExternalArchive.default_io_index = ExternalIndex.new(nil, :format => 'II')
   
   # The underlying index of [position, length] arrays
   # indicating where entries in the io are located.
@@ -53,6 +76,28 @@ class ExternalArchive < External::Base
   def initialize(io=nil, io_index=[])
     super(io)
     @io_index = io_index
+  end
+  
+  # Returns true if io_index is an Array.
+  def cached?
+    io_index.kind_of?(Array)
+  end
+  
+  # Turns on or off caching by converting io_index
+  # to an Array (cache=true) or to an ExternalIndex
+  # (cache=false).
+  def cache=(input)
+    case
+    when input && !cached?
+      cache = io_index.to_a
+      io_index.close
+      @io_index = cache
+      
+    when !input && cached?
+      io_index << {:format => 'II'}
+      @io_index = ExternalIndex[*io_index]
+      
+    end
   end
   
   # Closes self as in External::Base#close.  An io_path may be
@@ -70,11 +115,10 @@ class ExternalArchive < External::Base
     super(path, overwrite)
   end
   
-  # Returns another instance of self.class; the new 
-  # instance will have an io_index of the same class
-  # as the current io_index.
+  # Returns another instance of self.class; the new instance will 
+  # be cached if self is cached.
   def another
-    self.class.new(nil, io_index.class.new)
+    self.class.new(nil, cached? ? [] : io_index.another)
   end
 
   protected
