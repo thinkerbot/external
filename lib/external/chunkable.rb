@@ -87,7 +87,7 @@ module External
       start += length if start < 0
       finish += length if finish < 0
       
-      [start, finish - start - (range.exclude_end? ? 1 : 0) ]
+      [start, finish - start - (range.exclude_end? ? 1 : 0)]
     end
     
     # The compliment to split_range; returns the span with a negative

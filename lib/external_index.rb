@@ -313,42 +313,48 @@ class ExternalIndex < External::Base
   #
   # Note that entries are returned in frame, as arrays.
   def [](one, two = nil)
+    one = convert_to_int(one)
+    
     case one
     when Fixnum
-      one += length if one < 0
-      return nil if one < 0
-
-      unless two == nil
-        raise TypeError, "no implicit conversion from nil to integer" if two.nil?
-        return [] if two == 0 || one >= length
-        return nil if two < 0
-      end
       
+      # normalize the index
+      if one < 0
+        one += length 
+        return nil if one < 0
+      end
+
       if two == nil 
         at(one)            # read one, no frame
-      else 
+      else
+        two = convert_to_int(two)
+        return nil if two < 0 || one > length
+        return []  if two == 0 || one == length
+        
         read(two, one)     # read length, framed
       end
       
     when Range
       raise TypeError, "can't convert Range into Integer" unless two == nil
+      
       # total is the length of self
       total = length
       
       # split the range
-      start, finish = one.begin, one.end
+      start = convert_to_int(one.begin)
       start += total if start < 0
+      
+      finish = convert_to_int(one.end)
       finish += total if finish < 0
       
       length = finish - start
       length -= 1 if one.exclude_end?
   
-      # checks for conformance with array range retrieval
+      # (identical to those above...)
       return nil if start < 0 || start > total
-      return [] if length < 0 || start == total
+      return []  if length < 0 || start == total
       
-      # read framed results
-      read(length + 1, start)
+      read(length + 1, start)  # read length, framed
       
     when nil
       raise TypeError, "no implicit conversion from nil to integer"
@@ -927,8 +933,14 @@ class ExternalIndex < External::Base
   end
   
   private
-
-  # helper method to inspect large arrays
+  
+  # converts obj to an int using the <tt>to_int</tt>
+  # method, if the object responds to <tt>to_int</tt>
+  def convert_to_int(obj)  # :nodoc:
+    obj.respond_to?(:to_int) ? obj.to_int : obj
+  end
+  
+  # helper to inspect large arrays
   def ellipse_inspect(array) # :nodoc:
     if array.length > 10
       "[#{array[0,5].join(', ')} ... #{array[-5,5].join(', ')}] (length = #{array.length})"
