@@ -4,18 +4,22 @@ require 'tempfile'
 
 class BaseTest < Test::Unit::TestCase
   include External
-
-  attr_reader :array, :b, :tempfile
+  
+  acts_as_file_test
+  
+  attr_reader :array, :base, :tempfile
 
   def setup
+    super
     @array = ('a'..'z').to_a
     @tempfile = Tempfile.new("basetest")
     @tempfile << array.join('')
-    @b = Base.new(@tempfile)
+    @base = Base.new(@tempfile)
   end
   
   def teardown
     tempfile.close unless tempfile.closed?
+    super
   end
 
   #
@@ -48,45 +52,94 @@ class BaseTest < Test::Unit::TestCase
   end
   
   #
-  # close, closed? test
+  # closed? test
+  #
+  
+  def test_closed_is_true_if_io_is_closed
+    assert !base.closed?
+    base.io.close
+    assert base.closed?  
+  end
+  
+  #
+  # close test
   #
 
   def test_close_closes_io
-    assert !b.io.closed?
-    assert b.close
-    assert b.io.closed?
-    assert !b.close
-  end
-  
-  def test_closed_returns_closed_state_of_io
-    b.io.close   
-    assert b.closed?
-  end
-  
-  def test_close_moves_file_to_path_if_specifed
-    path = File.dirname(__FILE__) + "/target.txt"
-    assert !File.exists?(path)
-    assert File.exists?(b.io.path)
+    assert !base.io.closed?
+    assert base.close
     
-    begin
-      b.io.write " content"
-      b.close(path)
+    assert base.io.closed?
+    assert !base.close
+  end
+  
+  def test_close_returns_true_if_it_closed_io
+    base = Base.new
+    assert !base.io.closed?
+    assert base.close
+    
+    base = Base.new
+    base.io.close
+    assert !base.close
+  end
+  
+  def test_close_moves_File_io_to_path_if_specified
+    source = method_tempfile("source.txt")
+    target = method_tempfile("target.txt")
+    assert !File.exists?(target)
+    
+    base = Base.new File.open(source, 'w')
+    base.io.write "abcde"
+    base.close(target)
 
-      assert File.exists?(path)
-      assert !File.exists?(b.io.path)
-      assert_equal "abcdefghijklmnopqrstuvwxyz content", File.read(path)
-    ensure
-      FileUtils.rm(path) if File.exists?(path)
-    end
+    assert !File.exists?(source)
+    assert File.exists?(target)
+    assert_equal "abcde", File.read(target)
   end
   
-  def test_close_does_not_move_file_if_file_doesnt_exist_or_not_path
-    b = Base.new
-    b.close(nil)
-    assert File.exists?(b.io.path)
+  def test_close_moves_Tempfile_to_path_if_specifed
+    source = Tempfile.new("base")
+    target = method_tempfile("target.txt")
+    assert !File.exists?(target)
     
-    b = Base.new
-    b.close(false)
-    assert File.exists?(b.io.path)
+    base = Base.new source
+    base.io.write "abcde"
+    base.close(target)
+
+    assert !File.exists?(source.path)
+    assert File.exists?(target)
+    assert_equal "abcde", File.read(target)
+  end
+
+  def test_close_dumps_non_File_non_Tempfile_io_to_path_if_specifed
+    target = method_tempfile("target.txt")
+    assert !File.exists?(target)
+    
+    base = Base.new StringIO.new("")
+    base.io.write "abcde"
+    base.close(target)
+
+    assert File.exists?(target)
+    assert_equal "abcde", File.read(target)
+  end
+  
+  def test_close_raises_error_if_target_exists
+    target = method_tempfile("target.txt") {|file| file << "existing content"}
+    assert File.exists?(target)
+    
+    assert_raise(ArgumentError) { base.close(target) }
+    
+    assert_equal "existing content", File.read(target)
+  end
+  
+  def test_close_overwrites_existing_target_if_specified
+    target = method_tempfile("target.txt") {|file| file << "existing content"}
+    assert File.exists?(target)
+    
+    base = Base.new
+    base.io.write "new content"
+    assert_nothing_raised { base.close(target, true) }
+    
+    assert_equal "new content", File.read(target)
   end
 end

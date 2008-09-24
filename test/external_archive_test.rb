@@ -3,12 +3,86 @@ require 'external_archive'
 
 class ExternalArchiveTest < Test::Unit::TestCase
   attr_reader :ea, :data
-
+  
+  acts_as_file_test
+  
   def setup
+    super
+    
     # cls represents Array in many of the tests taken from MRI
     @cls = ExternalArchive
     @data = ""
     @ea = ExternalArchive.new StringIO.new(data)
+  end
+  
+  #
+  # ExternalArchive.index_path test
+  #
+  
+  def test_index_path_documentation
+    assert_equal "/path/to/file.index", ExternalArchive.index_path("/path/to/file.txt")
+  end
+  
+  def test_index_path_returns_nil_for_nil
+    assert_equal nil, ExternalArchive.index_path(nil)
+  end
+  
+  #
+  # close test
+  #
+  
+  def test_close_closes_io_and_io_index
+    index = ExternalIndex.new
+    strio = StringIO.new(data)
+    archive = ExternalArchive.new strio, index
+    
+    assert !index.closed?
+    assert !strio.closed?
+    assert !archive.closed?
+    
+    archive.close
+    
+    assert index.closed?
+    assert strio.closed?
+    assert archive.closed?
+  end
+  
+  def test_close_closes_io_and_io_index_with_paths_if_specified
+    archive = ExternalArchive.new StringIO.new(data), ExternalIndex.new
+    archive[0] = "abcde"
+    
+    path = method_tempfile('path')
+    index_path = method_tempfile('index_path')
+    
+    assert !File.exists?(path)
+    assert !File.exists?(index_path)
+    
+    archive.close(path, index_path)
+    
+    assert File.exists?(path)
+    assert_equal "abcde", File.read(path)
+    
+    assert File.exists?(index_path)
+    assert_equal [0,5].pack("II"), File.read(index_path)
+  end
+  
+  def test_close_dumps_non_ExternalIndex_data_to_index_path
+    archive = ExternalArchive.new StringIO.new(data), []
+    archive[0] = "abcde"
+    
+    path = method_tempfile('path')
+    index_path = method_tempfile('index_path')
+    
+    assert !File.exists?(path)
+    assert !File.exists?(index_path)
+    
+    archive.close(path, index_path)
+    
+    assert File.exists?(path)
+    assert_equal "abcde", File.read(path)
+    
+    assert File.exists?(index_path)
+    assert_equal [0,5].pack("II"), File.read(index_path)
   end
   
   #

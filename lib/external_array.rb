@@ -1,4 +1,4 @@
-require 'ext_arc'
+require 'external_archive'
 require 'yaml'
 
 #--
@@ -13,7 +13,7 @@ require 'yaml'
 #  If appending, ONLY allow << and all changes get committed to the original file.
 #
 #  This should allow returning of new arrayio objects under read/write conditions
-#  By default read-only.  No insertions.  New ExtArr objects inherit parent mode.
+#  By default read-only.  No insertions.  New ExternalArray objects inherit parent mode.
 #
 #  Independent modes:
 #  -  r
@@ -35,7 +35,7 @@ require 'yaml'
 #   @cls[ 'cat', 99, /a/, @cls[ 1, 2, 3] ].include?(@cls[ 1, 2, 3])  raises error
 #++
 
-class ExtArr < ExtArc
+class ExternalArray < ExternalArchive
   
   def reindex(&block)
     reindex_by_sep(nil, 

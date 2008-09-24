@@ -1,26 +1,28 @@
 require File.join(File.dirname(__FILE__), 'external_test_helper.rb') 
-require 'ext_arr'
+require 'external_array'
 require 'fileutils'
 
-class ExtArrTest < Test::Unit::TestCase
-  acts_as_subset_test
+class ExternalArrayTest < Test::Unit::TestCase
+  acts_as_file_test
 
   attr_reader :ea, :tempfile
 
   def setup
+    super
     # cls represents an array
-    @cls = ExtArr
+    @cls = ExternalArray
     
     @tempfile = Tempfile.new("eatest")
     @tempfile << string
     @tempfile.pos = 0
 
-    @ea = ExtArr.new(@tempfile)
-    @ea._index.concat(index)
+    @ea = ExternalArray.new(@tempfile)
+    @ea.io_index.concat(index)
   end
   
   def teardown
     @tempfile.close unless @tempfile.closed?
+    super
   end
   
   def string
@@ -35,52 +37,48 @@ class ExtArrTest < Test::Unit::TestCase
     [[0,3],[3,2],[5,3]]
   end
   
-  def filepath(path)
-    File.join(File.dirname(__FILE__), "ext_arr", path)
-  end
-  
   #
   # doc tests
   #
   
-  def test_readme_doc_for_ext_arr
-    ea = ExtArr[1, 2.2, "cat", {:key => 'value'}]
-    assert_equal "cat", ea[2]  
-    assert_equal({:key => 'value'}, ea.last)
-    ea << [:a, :b]
-    assert_equal [1, 2.2, "cat", {:key => 'value'}, [:a, :b]], ea.to_a 
-    
-    assert_equal Tempfile, ea.io.class 
-    ea.io.rewind
-    assert_equal "--- 1\n--- 2.2\n--- cat\n--- \n:key: value\n--- \n- :a\n- :b\n", ea.io.read
-
-    assert_equal ExtInd, ea._index.class 
-    assert_equal [[0, 6], [6, 8], [14, 8], [22, 17], [39, 15]], ea._index.to_a  
-    
-    Tempfile.open("test_readme_doc_for_ext_arr") do |file|
-  	  file << "--- 1\n--- 2.2\n--- cat\n--- \n:key: value\n--- \n- :a\n- :b\n"
-  	  file.flush
-
-      index_filepath = ExtArr.default_index_filepath(file.path)
-  	  assert !File.exists?(index_filepath)
-
-  	  ea = ExtArr.new(file)
-  	  assert_equal [], ea.to_a 
-  	  ea.reindex 
-  	  assert_equal [1, 2.2, "cat", {:key => 'value'}, [:a, :b]], ea.to_a
-  	end
-  end
+  # def test_readme_doc_for_ext_arr
+  #   ea = ExternalArray[1, 2.2, "cat", {:key => 'value'}]
+  #   assert_equal "cat", ea[2]  
+  #   assert_equal({:key => 'value'}, ea.last)
+  #   ea << [:a, :b]
+  #   assert_equal [1, 2.2, "cat", {:key => 'value'}, [:a, :b]], ea.to_a 
+  #   
+  #   assert_equal Tempfile, ea.io.class 
+  #   ea.io.rewind
+  #   assert_equal "--- 1\n--- 2.2\n--- cat\n--- \n:key: value\n--- \n- :a\n- :b\n", ea.io.read
+  # 
+  #   assert_equal ExternalIndex, ea.io_index.class 
+  #   assert_equal [[0, 6], [6, 8], [14, 8], [22, 17], [39, 15]], ea.io_index.to_a  
+  #   
+  #   Tempfile.open("test_readme_doc_for_ext_arr") do |file|
+  #     file << "--- 1\n--- 2.2\n--- cat\n--- \n:key: value\n--- \n- :a\n- :b\n"
+  #     file.flush
+  # 
+  #     index_filepath = ExternalArray.default_index_filepath(file.path)
+  #     assert !File.exists?(index_filepath)
+  # 
+  #     ea = ExternalArray.new(file)
+  #     assert_equal [], ea.to_a 
+  #     ea.reindex 
+  #     assert_equal [1, 2.2, "cat", {:key => 'value'}, [:a, :b]], ea.to_a
+  #   end
+  # end
   
   #
   # test setup
   #
   
   def test_setup
-    assert_equal ExtArr, @cls
+    assert_equal ExternalArray, @cls
     
     assert_equal string, tempfile.read
     assert_equal tempfile.path, ea.io.path
-    assert_equal index, ea._index.to_a
+    assert_equal index, ea.io_index.to_a
   end
   
   #
@@ -88,61 +86,54 @@ class ExtArrTest < Test::Unit::TestCase
   #
   
   def test_initialize
-    ea = ExtArr.new
+    ea = ExternalArray.new
       
     assert_equal Tempfile, ea.io.class
     assert_equal "", ea.io.read
-  
-    assert ea._index.cached?
-    assert_equal [], ea._index.to_a
+    assert_equal [], ea.io_index.to_a
   end
   
   def test_initialize_with_existing_file_and_index
-    File.open(filepath("input.txt")) do |file|
-      ea = ExtArr.new(file)
+    File.open(ctr.filepath("input.txt")) do |file|
+      ea = ExternalArray.new(file)
       
       assert_equal 'input.txt', File.basename(ea.io.path)
       assert_equal string, ea.io.read
-      assert_equal index, ea._index.to_a
+      assert_equal index, ea.io_index.to_a
       
       ea.close
     end
   end
   
   def test_initialize_load_specified_index_file
-    File.open(filepath('without_index.txt')) do |file|
-      alt_index = filepath('input.index')
+    File.open(ctr.filepath('without_index.txt')) do |file|
+      alt_index = ctr.filepath('input.index')
       
       assert File.exists?(alt_index)
       
-      ea = ExtArr.new(file, :index => alt_index)
-      assert_equal File.read(alt_index).unpack("I*"), ea._index.to_a.flatten
+      ea = ExternalArray.new(file, :index => alt_index)
+      assert_equal File.read(alt_index).unpack("I*"), ea.io_index.to_a.flatten
       ea.close
     end
   end
   
-  def test_initialize_in_uncached_mode_uses_external_index
-    ea = ExtArr.new(nil, :cache_index => false)
-    assert !ea._index.cached?
-  end
-  
-  def test_initialize_with_existing_file_and_non_existant_index_file_creates_index_file_in_cached_mode
-    File.open(filepath('without_index.txt')) do |file|
-      index_file = filepath('without_index.index')
-      begin
-        assert !File.exists?(index_file)
-        ea = ExtArr.new(file, :index => index_file)
-      
-        assert_equal ExtInd, ea._index.class
-        assert File.exists?(ea._index.io.path)
-        assert ea._index.cached?
-      
-        ea.close
-      ensure
-        FileUtils.rm(index_file) if File.exists?(index_file)
-      end  
-    end
-  end
+  # def test_initialize_with_existing_file_and_non_existant_index_file_creates_index_file_in_cached_mode
+  #   File.open(ctr.filepath('without_index.txt')) do |file|
+  #     index_file = ctr.filepath('without_index.index')
+  #     begin
+  #       assert !File.exists?(index_file)
+  #       ea = ExternalArray.new(file, :index => index_file)
+  #     
+  #       assert_equal ExternalIndex, ea.io_index.class
+  #       assert File.exists?(ea.io_index.io.path)
+  #       assert ea.io_index.cached?
+  #     
+  #       ea.close
+  #     ensure
+  #       FileUtils.rm(index_file) if File.exists?(index_file)
+  #     end  
+  #   end
+  # end
   
   #
   # test reindex
@@ -152,12 +143,12 @@ class ExtArrTest < Test::Unit::TestCase
     str = ""
     arr.each {|i| str += i.to_yaml}
     StringIO.open(str) do |strio|
-      ea = ExtArr.new(strio)
+      ea = ExternalArray.new(strio)
       ea.io.default_blksize = blksize unless blksize == nil 
       ea.reindex
       assert_equal arr, ea.to_a, PP.singleline_pp(arr, "")
       
-      yield(str, ea._index.to_a) if block_given?
+      yield(str, ea.io_index.to_a) if block_given?
     end
   end
   
@@ -208,26 +199,6 @@ class ExtArrTest < Test::Unit::TestCase
   #     end
   #   end
   # end
-  
-  #
-  # test close 
-  #
-  
-  def test_close_multiple_times_does_not_raise_error
-    ea.close
-    ea.close
-  end
-  
-  def test_close_closed_index_if_uncached
-    ea = ExtArr.new(nil, :cached => false)
-    assert !ea._index.closed?
-    assert !ea.closed?
-    
-    ea.close
-
-    assert ea._index.closed?
-    assert ea.closed?
-  end
   
   #
   # entry_to_str, str_to_entry test

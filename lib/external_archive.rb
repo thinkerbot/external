@@ -13,7 +13,7 @@ require 'external_index'
 #  If appending, ONLY allow << and all changes get committed to the original file.
 #
 #  This should allow returning of new arrayio objects under read/write conditions
-#  By default read-only.  No insertions.  New ExtArr objects inherit parent mode.
+#  By default read-only.  No insertions.  New ExternalArchive objects inherit parent mode.
 #
 #  Independent modes:
 #  -  r
@@ -29,14 +29,20 @@ require 'external_index'
 # 
 class ExternalArchive < External::Base
   class << self
+    
+    # Array-like constructor for an ExternalArchive.
     def [](*args)
-      ab = self.new
-      ab.concat(args)
-      ab
+      archive = self.new
+      archive.concat(args)
+      archive
     end
     
-    def default_index_filepath(path)
-      path.chomp(File.extname(path)) + '.index'
+    # Returns the default index filepath for path:
+    #
+    #   ExternalArchive.index_path("/path/to/file.txt")   # => "/path/to/file.index"
+    #
+    def index_path(path)
+      path ? path.chomp(File.extname(path)) + '.index' : nil
     end
   end
   
@@ -47,6 +53,21 @@ class ExternalArchive < External::Base
   def initialize(io=nil, io_index=[])
     super(io)
     @io_index = io_index
+  end
+  
+  # Closes self as in External::Base#close.  An io_path may be
+  # be specified to close io_index as well; when io_index is
+  # not an ExternalIndex, one is temporarily created with the
+  # current io_index content to 'close' and save the index.
+  def close(path=nil, index_path=self.class.index_path(path), overwrite=false)
+    case 
+    when io_index.kind_of?(ExternalIndex)
+      io_index.close(index_path, overwrite)
+    when index_path != nil
+      ExternalIndex[*io_index].close(index_path, overwrite)
+    end
+    
+    super(path, overwrite)
   end
   
   # Returns another instance of self.class; the new 
@@ -89,14 +110,16 @@ class ExternalArchive < External::Base
   # Clears the io_index, and yields io and the io_index to the
   # block for reindexing.  The io is flushed and rewound before
   # being yielded to the block.  Returns self
-  def reindex
+  def reset_index
     io_index.clear
     io.flush
     io.rewind
     yield(io, io_index)
     self
   end
-
+  
+  alias reindex reset_index
+  
   # The speed of reindex_by_regexp is dictated by how fast the underlying
   # code can match the pattern.  Under ideal conditions (ie a very simple 
   # regexp), it will be as fast as reindex_by_sep.
@@ -107,7 +130,7 @@ class ExternalArchive < External::Base
       :carryover_limit => 8388608
     }.merge(options)
     
-    reindex do |io, index|
+    reset_index do |io, index|
       span = options[:range_or_span] || io.default_span
       blksize = options[:blksize]
       carryover_limit = options[:carryover_limit]
@@ -152,7 +175,7 @@ class ExternalArchive < External::Base
     when !entry_follows_sep && exclude_sep then 3
     end
     
-    reindex do |io, index|
+    reset_index do |io, index|
       # calculate default span after resetio_index in case any flush needs to happen
       span = options[:range_or_span] || io.default_span
       blksize = options[:blksize]
@@ -237,7 +260,7 @@ class ExternalArchive < External::Base
       else
         self.to_a <=> another
       end
-    when ExtArr
+    when ExternalArray
       # if indexes are equal, additional 
       # 'quick' comparisons are allowed 
       if self.io_index == another.io_index
@@ -260,7 +283,7 @@ class ExternalArchive < External::Base
         self.to_a <=> another.to_a
       end
     else
-      raise TypeError.new("can't convert from #{another.class} to ExtArr or Array")
+      raise TypeError.new("can't convert from #{another.class} to ExternalArchive or Array")
     end
   end
 
@@ -354,14 +377,14 @@ class ExternalArchive < External::Base
       elen = io.write( entry_to_str(value) )
       io.length += elen
 
-      self.io_index[index] = pos_length_to_io_entry(epos, elen, value)
+      self.io_index[index] = pos_length_to_io_entry(epos, elen) # value
   
     else
       indicies = []
       
       values = case value
       when Array then value
-      when ExtArr
+      when ExternalArchive
         if value.object_id == self.object_id
           # special case, self will be reading and
           # writing from the same io, producing 
@@ -378,7 +401,7 @@ class ExternalArchive < External::Base
 
       values.each do |value|
         elen = io.write( entry_to_str(value) )
-        indicies << pos_length_to_io_entry(epos, elen, value)
+        indicies << pos_length_to_io_entry(epos, elen) # value
         
         io.length += elen
         epos += elen
@@ -423,10 +446,10 @@ class ExternalArchive < External::Base
 
   def concat(another)
     case another
-    when Array, ExtArr
+    when Array, ExternalArchive
       another.each {|item| self[length] = item }
     else 
-      raise TypeError.new("can't convert #{another.class} into ExtArr or Array")
+      raise TypeError.new("can't convert #{another.class} into ExternalArchive or Array")
     end
     self
   end

@@ -3,20 +3,21 @@ require 'external/io'
 
 module External
   
-  # Base provides a basic IO interface used by ExtArc, ExtArr, and ExtInd.
+  # Base provides a basic IO interface used by ExternalArchive, ExternalArray, 
+  # and ExternalIndex.
   class Base
     class << self
       
-      # Initializes an instance of self with File.open(fd, mode) and the
-      # specified options.  As with File.open, the instance will be passed to
-      # the block and closed when the block returns.  If no block is given,
-      # open returns the new instance.  
+      # Initializes an instance of self with File.open(fd, mode) as an io.
+      # As with File.open, the instance will be passed to the block and
+      # closed when the block returns.  If no block is given, open returns
+      # the new instance.  
       #
-      # Nil may be provided as an fd, in which case it is passed directly
-      # to new as the io.
-      def open(fd=nil, mode="rb", options={})
+      # Nil may be provided as an fd, in which case a Tempfile will be
+      # used (and mode gets ignored).
+      def open(fd=nil, mode="rb", *argv)
         fd = File.open(fd, mode) unless fd == nil
-        base = self.new(fd, options)
+        base = self.new(fd, *argv)
         
         if block_given?
           begin
@@ -36,6 +37,8 @@ module External
     # The underlying io for self.
     attr_reader :io
     
+    # The default tempfile basename for Base instances
+    # initialized without an io.
     TEMPFILE_BASENAME = "external_base"
     
     # Creates a new instance of self with the specified io.  If io==nil,
@@ -49,16 +52,32 @@ module External
       io.closed?
     end
   
-    # Closes io.  If path is specified and io.path is an existing file, then 
-    # the file is moved to path.
-    def close(path=nil)
+    # Closes io.  If a path is specified, io will be dumped to it.  If
+    # io is a File or Tempfile, the existing file is moved (not dumped)
+    # to path.  Raises an error if path already exists and overwrite is 
+    # not specified.
+    def close(path=nil, overwrite=false)
       result = !io.closed?
       
-      io.close unless io.closed?
-      if path && io.respond_to?(:path) && File.exists?(io.path)
-        FileUtils.move(io.path, path)
+      if path 
+        if File.exists?(path) && !overwrite
+          raise ArgumentError, "already exists: #{path}"
+        end
+      
+        case io
+        when File, Tempfile
+          io.close unless io.closed?
+          FileUtils.move(io.path, path)
+        else
+          io.flush
+          io.rewind
+          File.open(path, "w") do |file|
+             file << io.read(io.default_blksize) while !io.eof?
+          end
+        end
       end
       
+      io.close unless io.closed?
       result
     end
     
