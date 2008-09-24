@@ -333,6 +333,9 @@ class ExternalArchive < External::Base
     else
       pos = nil
       entries.collect do |array|
+        # a nil array may occur with an Array io_index
+        next if array == nil
+        
         epos, elen = io_entry_to_pos_length(array)
         
         # only set io position if necessary
@@ -358,7 +361,7 @@ class ExternalArchive < External::Base
       raise TypeError.new("can't convert Range into Integer") if args.length == 3 
       # for conformance with setting a range with nil (truncates)
       value = [] if value.nil?
-      offset, length = External::Chunkable.split_range(index)
+      offset, length = split_range(index)
       return (self[offset, length + 1] = value)
     end
   

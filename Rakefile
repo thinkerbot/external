@@ -87,7 +87,7 @@ end
 desc 'Run specs.'
 task :spec do
   ARGV.clear
-  ARGV.concat ["#{File.dirname(__FILE__)}/test/rubyspec/**/*_spec.rb"]
+  ARGV.concat Dir.glob("#{File.dirname(__FILE__)}/test/rubyspec/**/#{ENV['pattern'] || '*'}_spec.rb")
   gem 'mspec'
   load 'mspec'
 end

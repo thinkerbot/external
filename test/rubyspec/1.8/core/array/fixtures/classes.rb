@@ -54,58 +54,55 @@
 #   end
 # end
 
-puts 'not implemented: classes.rb'
-unless true
 module ArraySpecs
-  def self.frozen_array
-    @frozen_array ||= [1,2,3]
-    @frozen_array.freeze
-    @frozen_array
-  end
-
-  def self.recursive_array
-    a = [1, 'two', 3.0]
-    5.times { a << a }
-    a
-  end
-
-  def self.empty_recursive_array
-    a = []
-    a << a
-    a
-  end
-
-  class MyArray < Array; end
-
-  class Sexp < Array
-    def initialize(*args)
-      super(args)
-    end
-  end
-
-  class ToAryArray < Array
-    def to_ary() ["to_ary", "was", "called!"] end
-  end
-
-  class MyRange < Range; end
-
-  class AssocKey
-    def ==(other); other == 'it'; end
-  end
-
-  class D 
-    def <=>(obj) 
-      return 4 <=> obj unless obj.class == D
-      0
-    end
-  end
+  # def self.frozen_array
+  #   @frozen_array ||= ExternalArray[1,2,3]
+  #   @frozen_array.freeze
+  #   @frozen_array
+  # end
+   
+  # def self.recursive_array
+  #   a = [1, 'two', 3.0]
+  #   5.times { a << a }
+  #   a
+  # end
+  # 
+  # def self.empty_recursive_array
+  #   a = []
+  #   a << a
+  #   a
+  # end
+  # 
+  class MyArray < ExternalArray; end
+  # 
+  # class Sexp < Array
+  #   def initialize(*args)
+  #     super(args)
+  #   end
+  # end
+  # 
+  # class ToAryArray < ExternalArray
+  #   def to_ary() ["to_ary", "was", "called!"] end
+  # end
   
-  class SubArray < Array
-    attr_reader :special
-    
-    def initialize(size=0)
-      @special = size
-    end
-  end
+  class MyRange < Range; end
+  # 
+  # class AssocKey
+  #   def ==(other); other == 'it'; end
+  # end
+  # 
+  # class D 
+  #   def <=>(obj) 
+  #     return 4 <=> obj unless obj.class == D
+  #     0
+  #   end
+  # end
+  # 
+  # class SubArray < Array
+  #   attr_reader :special
+  #   
+  #   def initialize(size=0)
+  #     @special = size
+  #   end
+  # end
 end
-end # remove with unless true
