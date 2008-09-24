@@ -6,33 +6,12 @@ require 'fileutils'
 class ExternalIndexTest < Test::Unit::TestCase
   acts_as_subset_test
 
-  attr_reader :index, :tempfile
+  attr_reader :index
 
   def setup
     # cls represents Array in many of the tests taken from MRI
     @cls = ExternalIndex
-
-    @tempfile = Tempfile.new("indextest")
-    @tempfile << array.pack(format)
-    @tempfile.pos = 0
-    
-    @index = ExternalIndex.new(@tempfile)
-  end
-  
-  def array
-    [1,2,3,4,5]
-  end
-  
-  def framed_array
-    [[1],[2],[3],[4],[5]]
-  end
-  
-  def format
-    "I*"
-  end
-  
-  def teardown
-    @tempfile.close unless @tempfile.closed?
+    @index = ExternalIndex.new [1,2,3,4,5].pack("I*")
   end
 
   #
@@ -60,11 +39,13 @@ class ExternalIndexTest < Test::Unit::TestCase
   #     assert_equal [[1,2,3],[4,5,6],[7,8,9]], index.to_a
   #   end
   # end
-  
+
   #
   # setup tests
   #
   
+  # NOTE if the setup changes, all tests using the default index
+  # need to be re-examined for validity
   def test_setup
     assert_equal ExternalIndex, @cls
     
@@ -75,9 +56,7 @@ class ExternalIndexTest < Test::Unit::TestCase
     assert_equal [0], index.nil_value
     assert_equal({:format => "I", :buffer_size => 8 * 2**20, :nil_value => [0]}, index.options)
     
-    tempfile.pos = 0
-    assert_equal array.pack(format), tempfile.read
-    assert_equal tempfile.path, index.io.path
+    assert_equal [1,2,3,4,5].pack("I*"), index.io.string
   end
 
   #
@@ -85,15 +64,11 @@ class ExternalIndexTest < Test::Unit::TestCase
   #
   
   def test_read_returns_the_index_file_in_frame
-    assert_equal framed_array, ExternalIndex.read(tempfile.path)
-    
-    tempfile.pos = tempfile.length
-    tempfile << [6].pack("I")
-    tempfile.flush
-    tempfile.pos = 0
-    assert_equal [1,2,3,4,5,6].pack("I*"), tempfile.read
-    
-    assert_equal [[1,2],[3,4],[5,6]], ExternalIndex.read(tempfile.path, :format => 'II')
+    Tempfile.new("read_test") do |tempfile|
+      tempfile << [1,2,3,4].pack("I*")
+      assert_equal [[1],[2],[3],[4]], ExternalIndex.read(tempfile.path)
+      assert_equal [[1,2],[3,4]], ExternalIndex.read(tempfile.path, :format => 'II')
+    end
   end
   
   #
@@ -234,61 +209,61 @@ class ExternalIndexTest < Test::Unit::TestCase
   end
   
   def test_initialize_calculates_frame_from_format
-    index = @cls.new nil, :format => 'III'
+    index = ExternalIndex.new nil, :format => 'III'
     assert_equal 3, index.frame
     
-    index = @cls.new nil, :format => 'ID'
+    index = ExternalIndex.new nil, :format => 'ID'
     assert_equal 2, index.frame
     
-    index = @cls.new nil, :format => 'I8I'
+    index = ExternalIndex.new nil, :format => 'I8I'
     assert_equal 9, index.frame
   end
   
   def test_initialize_calculates_frame_size_from_format
-    index = @cls.new nil, :format => 'III'
+    index = ExternalIndex.new nil, :format => 'III'
     assert_equal 12, index.frame_size
     
-    index = @cls.new nil, :format => 'ID'
+    index = ExternalIndex.new nil, :format => 'ID'
     assert_equal 12, index.frame_size
     
-    index = @cls.new nil, :format => 'I8I'
+    index = ExternalIndex.new nil, :format => 'I8I'
     assert_equal 36, index.frame_size
   end
   
   def test_initialize_condenses_bulk_formats
-    index = @cls.new nil, :format => 'III'
+    index = ExternalIndex.new nil, :format => 'III'
     assert_equal 'I*', index.format
     assert index.process_in_bulk
     
-    index = @cls.new nil, :format => 'I8I'
+    index = ExternalIndex.new nil, :format => 'I8I'
     assert_equal 'I*', index.format
     assert index.process_in_bulk
   end
   
   def test_initialize_with_format_containing_an_unsupported_directive_raises_error
-    assert_raise(ArgumentError) { @cls.new(nil, :format => 'x') }
-    assert_raise(ArgumentError) { @cls.new(nil, :format => 'I_I') }
-    assert_raise(ArgumentError) { @cls.new(nil, :format => 'I*') }
+    assert_raise(ArgumentError) { ExternalIndex.new(nil, :format => 'x') }
+    assert_raise(ArgumentError) { ExternalIndex.new(nil, :format => 'I_I') }
+    assert_raise(ArgumentError) { ExternalIndex.new(nil, :format => 'I*') }
   end
   
   def test_initialize_sets_buffer_size
-    index = @cls.new nil, :buffer_size => 1000
+    index = ExternalIndex.new nil, :buffer_size => 1000
     assert_equal 1000, index.buffer_size
   end
   
   def test_initialize_sets_nil_value_to_an_frame_sized_array_of_zeros
-    index = @cls.new nil, :format => 'I'
+    index = ExternalIndex.new nil, :format => 'I'
     assert_equal [0], index.nil_value
     
-    index = @cls.new nil, :format => 'III'
+    index = ExternalIndex.new nil, :format => 'III'
     assert_equal [0,0,0], index.nil_value
   end
   
   def test_initialize_raises_error_if_specified_nil_value_is_incompatible_with_format
-    assert_raise(ArgumentError) { @cls.new nil, :format => 'I', :nil_value => [0,1] }
-    assert_raise(ArgumentError) { @cls.new nil, :format => 'II', :nil_value => [0] }
-    assert_raise(ArgumentError) { @cls.new nil, :format => 'I', :nil_value => [1.2] }
-    assert_raise(ArgumentError) { @cls.new nil, :format => 'I', :nil_value => ['a'] }
+    assert_raise(ArgumentError) { ExternalIndex.new nil, :format => 'I', :nil_value => [0,1] }
+    assert_raise(ArgumentError) { ExternalIndex.new nil, :format => 'II', :nil_value => [0] }
+    assert_raise(ArgumentError) { ExternalIndex.new nil, :format => 'I', :nil_value => [1.2] }
+    assert_raise(ArgumentError) { ExternalIndex.new nil, :format => 'I', :nil_value => ['a'] }
   end
   
   #
@@ -359,7 +334,7 @@ class ExternalIndexTest < Test::Unit::TestCase
   end
   
   def test_options_expands_packed_formats
-    index = @cls.new nil, :format => 'III'
+    index = ExternalIndex.new nil, :format => 'III'
     assert_equal 'I*', index.format
     
     assert_equal({
@@ -374,7 +349,7 @@ class ExternalIndexTest < Test::Unit::TestCase
   #
   
   def test_another_returns_new_instance
-    a = @cls[1,2,3]
+    a = ExternalIndex[1,2,3]
     a.enumerate_to_a = false
     
     b = a.another
@@ -384,7 +359,7 @@ class ExternalIndexTest < Test::Unit::TestCase
   end
   
   def test_another_has_same_options_as_self
-    a = @cls.new nil, :format => 'ID', :nil_value => [1,2], :buffer_size => 40
+    a = ExternalIndex.new nil, :format => 'ID', :nil_value => [1,2], :buffer_size => 40
     a.enumerate_to_a = false
     
     b = a.another
@@ -403,13 +378,13 @@ class ExternalIndexTest < Test::Unit::TestCase
   #
   
   def test_length_returns_io_length_divided_by_frame_size
-    assert_equal 20, tempfile.length
+    assert_equal 20, index.io.length
     assert_equal 5, index.length
     
-    tempfile.length = 4
+    index.io.length = 4
     assert_equal 1, index.length
     
-    tempfile.length = 0
+    index.io.length = 0
     assert_equal 0, index.length
   end
   
@@ -424,6 +399,7 @@ class ExternalIndexTest < Test::Unit::TestCase
   def test_pos_returns_io_pos_divided_by_frame_size
     assert_equal 0, index.io.pos
     assert_equal 0, index.pos
+    assert_equal 4, index.frame_size
     
     index.io.pos = 4
     assert_equal 1, index.pos
@@ -437,15 +413,19 @@ class ExternalIndexTest < Test::Unit::TestCase
   #
   
   def test_pos_set_documentation
-    i = @cls[[1],[2],[3]]
-    assert_equal 3, i.length  
-    i.pos = 2
-    assert_equal 2, i.pos             
-    i.pos = -1
-    assert_equal 2, i.pos           
+    index = ExternalIndex[[1],[2],[3]]
+    assert_equal 3, index.length
+  
+    assert_equal 2, (index.pos = 2; index.pos)
+    assert_equal 10, (index.pos = 10; index.pos)
+  
+    assert_equal 2, (index.pos = -1; index.pos)
+    assert_raise(ArgumentError) { index.pos = -10; index.pos}
   end
   
   def test_pos_set_sets_io_pos_to_index_value_of_input_times_frame_size
+    assert_equal 4, index.frame_size
+    
     index.pos = 1
     assert_equal 1, index.pos
     assert_equal 4, index.io.pos
@@ -456,11 +436,13 @@ class ExternalIndexTest < Test::Unit::TestCase
   end
   
   def test_positions_can_be_set_beyond_the_index_length
+    assert_equal 5, index.length
     index.pos = 10
     assert_equal 10, index.pos
   end
     
   def test_pos_set_raises_error_if_out_of_bounds
+    assert_equal 5, index.length
     assert_raise(ArgumentError) { index.pos = -6 }
   end
   
@@ -469,31 +451,33 @@ class ExternalIndexTest < Test::Unit::TestCase
   #
   
   def test_readbytes_documentation
-    i = @cls[[1],[2],[3]]
-    assert_equal [1,2,3], i.readbytes.unpack("I*")       
-    assert_equal [1], i.readbytes(1,0).unpack("I*")      
-    assert_equal [2,3], i.readbytes(10,1).unpack("I*")    
-    i.pos = 3
-    assert_equal "", i.readbytes                    
-    assert_equal nil, i.readbytes(1)                 
+    index = ExternalIndex[[1],[2],[3]]
+    assert_equal 0, index.pos
+    assert_equal [1,2,3], index.readbytes.unpack("I*")
+    assert_equal [1], index.readbytes(1,0).unpack("I*")
+    assert_equal [2,3], index.readbytes(10,1).unpack("I*")
+  
+    index.pos = 3
+    assert_equal "", index.readbytes
+    assert_equal nil, index.readbytes(1)      
   end
   
   def test_readbytes_returns_bytestring_for_n_and_pos
-    assert_equal array.pack(format), index.readbytes(5,0) 
-    assert_equal array.pack(format), index.readbytes(5,-5) 
-    assert_equal [2,3].pack(format), index.readbytes(2,1) 
+    assert_equal [1,2,3,4,5].pack("I*"), index.readbytes(5,0) 
+    assert_equal [1,2,3,4,5].pack("I*"), index.readbytes(5,-5) 
+    assert_equal [2,3].pack("I*"), index.readbytes(2,1) 
     
-    assert_equal array.pack(format), index.readbytes(10,0)
-    assert_equal array.pack(format), index.readbytes(10,-5)
+    assert_equal [1,2,3,4,5].pack("I*"), index.readbytes(10,0)
+    assert_equal [1,2,3,4,5].pack("I*"), index.readbytes(10,-5)
   
     index.pos = 0
-    assert_equal array.pack(format), index.readbytes
+    assert_equal [1,2,3,4,5].pack("I*"), index.readbytes
     
     index.pos = 3
-    assert_equal [4,5].pack(format), index.readbytes
+    assert_equal [4,5].pack("I*"), index.readbytes
   
     index.pos = 3
-    assert_equal [4].pack(format), index.readbytes(1)
+    assert_equal [4].pack("I*"), index.readbytes(1)
   end
   
   def test_readbytes_returns_nil_if_n_is_specified_and_no_entries_can_be_read
@@ -508,26 +492,21 @@ class ExternalIndexTest < Test::Unit::TestCase
     assert_raise(ArgumentError) { index.readbytes(1,-6) }
   end
   
-  def test_readbytes_behavior_is_like_io_behavior
-    tempfile.pos = 20
-    assert_equal "", tempfile.read(nil)
-    assert_nil tempfile.read(1)
-  end
-  
   #
   # unpack tests
   #
   
   def test_unpack_documentation
+    index = ExternalIndex[[1],[2],[3]]
     assert_equal "I*", index.format  
-    assert_equal [1], index.unpack( [1].pack('I*') )      
+    assert_equal [[1]], index.unpack( [1].pack('I*') )      
     assert_equal [[1], [2], [3]], index.unpack( [1,2,3].pack('I*') ) 
     assert_equal [], index.unpack("") 
   end
   
   def test_unpack_unpacks_string_into_frames_using_format
-    assert_equal [[1],[2],[3],[4],[5]], index.unpack(array.pack(format))
-    assert_equal [1], index.unpack([1].pack(format))
+    assert_equal [[1],[2],[3]], index.unpack([1,2,3].pack("I*"))
+    assert_equal [[1]], index.unpack([1].pack("I"))
     assert_equal [], index.unpack("")
   end
   
@@ -536,33 +515,37 @@ class ExternalIndexTest < Test::Unit::TestCase
   #
   
   def test_read_documentation
-    i = @cls[[1],[2],[3]]
-    assert_equal 0, i.pos                      
-    assert_equal [[1],[2],[3]], i.read                   
-    assert_equal [1], i.read(1,0)                 
-    assert_equal [[2],[3]], i.read(10,1)               
-    
-    i.pos = 3
-    assert_equal [], i.read                   
-    assert_equal nil, i.read(1)            
+    index = ExternalIndex[[1],[2],[3]]
+    assert_equal 0, index.pos
+    assert_equal [[1],[2],[3]], index.read
+    assert_equal [[1]], index.read(1,0)
+    assert_equal [[2],[3]], index.read(10,1)
+  
+    index.pos = 3
+    assert_equal [], index.read
+    assert_equal nil, index.read(1)   
   end
   
-  def test_read_returns_unpacked_array_for_n_and_pos
-    assert_equal framed_array, index.read(5,0) 
-    assert_equal framed_array, index.read(5,-5) 
+  def test_read_returns_unpacked_array_of_n_entries_read_from_pos
+    assert_equal [[1],[2],[3],[4],[5]], index.read(5,0)
     assert_equal [[2],[3]], index.read(2,1) 
-    
-    assert_equal framed_array, index.read(10,0)
-    assert_equal framed_array, index.read(10,-5)
-    
-    index.pos = 0
-    assert_equal framed_array, index.read
+  end
+  
+  def test_read_counts_back_from_length_for_negative_pos
+    assert_equal [[1],[2],[3],[4],[5]], index.read(5,-5) 
+    assert_equal [[2],[3]], index.read(2,-4) 
+  end
+  
+  def test_read_reads_remaining_entries_if_n_is_greater_than_length
+    assert_equal [[1],[2],[3],[4],[5]], index.read(10,0)
+    assert_equal [[4],[5]], index.read(10,3)
+  end
+  
+  def test_read_reads_remaining_entries_if_n_is_nil
+    assert_equal [[1],[2],[3],[4],[5]], index.read
     
     index.pos = 3
     assert_equal [[4],[5]], index.read
-  
-    index.pos = 3
-    assert_equal [4], index.read(1)
   end
   
   def test_read_returns_nil_if_n_is_specified_and_no_entries_can_be_read
@@ -577,19 +560,11 @@ class ExternalIndexTest < Test::Unit::TestCase
     assert_raise(ArgumentError) { index.read(1,-6) }
   end
   
-  def test_read_handles_mixed_formats
-    index = @cls.new tempfile, :format => "IQS"
-    tempfile.pos = 0
-    a = [1,2,3].pack("IQS")
-    b = [4,5,6].pack("IQS")
-    c = [7,8,9].pack("IQS")
-    tempfile << a + b + c
+  def test_read_unpacks_mixed_formats
+    str = [1,2,3].pack("IQS") + [4,5,6].pack("IQS") + [7,8,9].pack("IQS")
     
-    index.pos=0
+    index = ExternalIndex.new str, :format => "IQS"
     assert_equal [[1,2,3],[4,5,6],[7,8,9]], index.read
-    
-    index.pos=1
-    assert_equal [4,5,6], index.read(1)
   end
   
   #
@@ -597,86 +572,133 @@ class ExternalIndexTest < Test::Unit::TestCase
   #
   
   def test_write_documentation
-    i = @cls[]
-    i.write([[2],[3]], 1) 
-    i.pos = 0
-    i.write([[1]])
-    assert_equal [[1],[2],[3]], i.read(3, 0)
+    index = ExternalIndex[]
+    index.write([[2],[3]], 1)
+    index.pos = 0; 
+    index.write([[1]])
+    assert_equal [[1],[2],[3]], index.read(3, 0)
   end
   
+  def test_write_writes_the_framed_entries_to_self_starting_at_pos
+    index = ExternalIndex.new [1,2,3].pack('I*')
+    index.write([[4],[5]], 1)
+    
+    assert_equal [1,4,5].pack("I*"), index.io.string
+  end
+  
+  def test_write_pads_with_nil_value_if_pos_is_greater_than_length
+    index = ExternalIndex.new "", :nil_value => [8]
+    index.write([[4],[5]], 3)
+    
+    assert_equal [8,8,8,4,5].pack("I*"), index.io.string
+  end
+  
+  def test_write_converts_nil_entries_to_nil_value
+    index = ExternalIndex.new "", :nil_value => [8]
+    index.write([nil,[1], nil])
+    
+    assert_equal [8,1,8].pack("I*"), index.io.string
+  end
+  
+  def test_write_with_mixed_formats
+    index = ExternalIndex.new "", :format => "IQS"
+    index.write([[1,2,3], [4,5,6], [7,8,9]], 0)
+
+    expected = [1,2,3].pack("IQS") + [4,5,6].pack("IQS") + [7,8,9].pack("IQS")
+    assert_equal expected, index.io.string
+  end
+  
+  def test_write_raises_error_for_incorrectly_framed_entries
+    index = ExternalIndex.new "", :format => 'II'
+    assert_raise(ArgumentError) { index.write([[1]]) }
+    assert_raise(ArgumentError) { index.write([[1,2,3]]) }
+    assert_raise(ArgumentError) { index.write([[1,2], [3], [4,5]]) }
+  end
+  
+  def test_write_accepts_an_ExternalIndex
+    a = ExternalIndex.new ""
+    b = ExternalIndex.new [1,2,3].pack("I*")
+    
+    a.write(b)
+    assert_equal [1,2,3].pack("I*"), a.io.string
+    
+    a.write(b, 1)
+    assert_equal [1,1,2,3].pack("I*"), a.io.string
+    
+    a.write(b, 5)
+    assert_equal [1,1,2,3, 0, 1,2,3].pack("I*"), a.io.string
+  end
+  
+  def test_write_raises_error_for_ExternalIndex_with_unmatching_format
+    a = ExternalIndex.new "", :format => 'I'
+    b = ExternalIndex.new "", :format => 'II'
+    assert_raise(ArgumentError) { a.write(b) }
+  end
   
   #
   # unframed_write test
   #
   
   def test_unframed_write_documentation
-    i = @cls[]
-    i.unframed_write([2,3], 1) 
-    i.pos = 0
-    i.unframed_write([1])
-    assert_equal [[1],[2],[3]], i.read(3, 0)
+    index = ExternalIndex[]
+    index.unframed_write([2,3], 1)
+    index.pos = 0; 
+    index.unframed_write([1])
+    assert_equal [[1],[2],[3]], index.read(3, 0)
   end
   
   def test_unframed_write_unframed_writes_packed_array_to_io_at_pos_and_adjusts_io_length
-    index = @cls.new
+    index = ExternalIndex.new ""
     index.unframed_write([1,2,3])
     assert_equal 12, index.io.length
     assert_equal 12, index.io.pos
      
     index.io.pos = 0
-    assert_equal [1,2,3].pack("I*"), index.io.read
+    assert_equal [1,2,3].pack("I*"), index.io.string
     
     index.unframed_write([-2], 1)
     assert_equal 12, index.io.length
     assert_equal 8, index.io.pos
      
     index.io.pos = 0
-    assert_equal [1,-2,3].pack("I*"), index.io.read
+    assert_equal [1,-2,3].pack("I*"), index.io.string
   end
   
   def test_unframed_write_pads_with_nil_value_if_position_is_past_length
-    index = @cls.new nil, :nil_value => [8]
+    index = ExternalIndex.new "", :nil_value => [8]
     assert_equal 0, index.length
     
     index.unframed_write([1,2,3], 2)
     
     index.io.pos = 0
-    assert_equal [8,8,1,2,3], index.io.read.unpack("I*")
+    assert_equal [8,8,1,2,3].pack("I*"), index.io.string
   end
   
-  def test_unframed_write_unframed_writes_nothing_with_empty_array
-    assert_equal 20, index.io.length
+  def test_unframed_write_writes_nothing_with_empty_array
+    index = ExternalIndex.new ""
     
     index.unframed_write([])
     index.pos = 0
-    assert_equal 20, index.io.length
-    
-    index.unframed_write([], 0)
-    index.pos = 0
-    assert_equal 20, index.io.length
+    assert_equal "", index.io.string
   end
   
   def test_unframed_write_raises_error_if_array_is_not_in_frame
-    index = @cls.new(nil, :format => "II")
+    index = ExternalIndex.new('', :format => "II")
     assert_raise(ArgumentError) { index.unframed_write([1]) }
     assert_raise(ArgumentError) { index.unframed_write([1,2,3]) }
   end
   
-  def test_unframed_write_handles_mixed_formats
-    index = @cls.new tempfile, :format => "IQS"
-    a = [1,2,3].pack("IQS")
-    b = [4,5,6].pack("IQS")
-    c = [7,8,9].pack("IQS")
-    d = [-4,-5,-6].pack("IQS")
-    
-    index.unframed_write([1,2,3,4,5,6,7,8,9])
-    tempfile.pos=0
-    assert_equal a+b+c, tempfile.read
-    
-    index.pos=1
-    index.unframed_write([-4,-5,-6])
-    tempfile.pos=0
-    assert_equal a+d+c, tempfile.read
+  def test_unframed_write_raises_error_array_contains_nils
+    assert_raise(TypeError) { index.unframed_write([nil]) }
+    assert_raise(TypeError) { index.unframed_write([1,nil,3]) }
+  end
+  
+  def test_unframed_write_with_mixed_formats
+    index = ExternalIndex.new "", :format => "IQS"
+    index.unframed_write([1,2,3,4,5,6,7,8,9], 0)
+
+    expected = [1,2,3].pack("IQS") + [4,5,6].pack("IQS") + [7,8,9].pack("IQS")
+    assert_equal expected, index.io.string
   end
   
   #
@@ -705,140 +727,140 @@ class ExternalIndexTest < Test::Unit::TestCase
   
   def test_read_and_unframed_write_handles_full_numeric_range_for_numeric_formats
     # S handles an unsigned short
-    i = @cls.new tempfile, :format => 'S'
+    i = @cls.new "", :format => 'S'
     
     i.unframed_write([USHRT_MIN], 0)
-    assert_equal [USHRT_MIN], i.read(1,0)
+    assert_equal [[USHRT_MIN]], i.read(1,0)
     i.unframed_write([USHRT_MAX], 0)
-    assert_equal [USHRT_MAX], i.read(1,0)
+    assert_equal [[USHRT_MAX]], i.read(1,0)
   
     i.unframed_write([USHRT_MIN-1], 0)
-    assert_equal [USHRT_MAX], i.read(1,0)
+    assert_equal [[USHRT_MAX]], i.read(1,0)
   
     # s handles an signed short
-    i = @cls.new tempfile, :format => 's'
+    i = @cls.new "", :format => 's'
     
     i.unframed_write([SHRT_MIN], 0)
-    assert_equal [SHRT_MIN], i.read(1,0)
+    assert_equal [[SHRT_MIN]], i.read(1,0)
     i.unframed_write([SHRT_MAX], 0)
-    assert_equal [SHRT_MAX], i.read(1,0)
+    assert_equal [[SHRT_MAX]], i.read(1,0)
   
     i.unframed_write([SHRT_MIN], 0)
-    assert_equal [SHRT_MIN], i.read(1,0)
+    assert_equal [[SHRT_MIN]], i.read(1,0)
     i.unframed_write([SHRT_MIN-1], 0)
-    assert_equal [SHRT_MAX], i.read(1,0)
+    assert_equal [[SHRT_MAX]], i.read(1,0)
     
     # I,L handle an unsigned long
     ['I', 'L'].each do |format|
-      i = @cls.new tempfile, :format => format
+      i = @cls.new "", :format => format
       
       i.unframed_write([ULONG_MIN], 0)
-      assert_equal [ULONG_MIN], i.read(1,0)
+      assert_equal [[ULONG_MIN]], i.read(1,0)
       i.unframed_write([ULONG_MAX], 0)
-      assert_equal [ULONG_MAX], i.read(1,0)
+      assert_equal [[ULONG_MAX]], i.read(1,0)
   
       i.unframed_write([ULONG_MIN-1], 0)
-      assert_equal [ULONG_MAX], i.read(1,0)
+      assert_equal [[ULONG_MAX]], i.read(1,0)
     end
     
     # i,l handle an signed long
     ['i', 'l'].each do |format|
-      i = @cls.new tempfile, :format => format
+      i = @cls.new "", :format => format
       
       i.unframed_write([LONG_MIN], 0)
-      assert_equal [LONG_MIN], i.read(1,0)
+      assert_equal [[LONG_MIN]], i.read(1,0)
       i.unframed_write([LONG_MAX], 0)
-      assert_equal [LONG_MAX], i.read(1,0)
+      assert_equal [[LONG_MAX]], i.read(1,0)
   
       i.unframed_write([LONG_MIN], 0)
-      assert_equal [LONG_MIN], i.read(1,0)
+      assert_equal [[LONG_MIN]], i.read(1,0)
       i.unframed_write([LONG_MIN-1], 0)
-      assert_equal [LONG_MAX], i.read(1,0)
+      assert_equal [[LONG_MAX]], i.read(1,0)
     end
   
     # Q handles an unsigned long long
-    i = @cls.new tempfile, :format => 'Q'
+    i = @cls.new "", :format => 'Q'
     
     i.unframed_write([ULLONG_MIN], 0)
-    assert_equal [ULLONG_MIN], i.read(1,0)
+    assert_equal [[ULLONG_MIN]], i.read(1,0)
     i.unframed_write([ULLONG_MAX], 0)
-    assert_equal [ULLONG_MAX], i.read(1,0)
+    assert_equal [[ULLONG_MAX]], i.read(1,0)
   
     i.unframed_write([ULLONG_MIN-1], 0)
-    assert_equal [ULLONG_MAX], i.read(1,0)
+    assert_equal [[ULLONG_MAX]], i.read(1,0)
     
     # q handles an signed long long
-    i = @cls.new tempfile, :format => 'q'
+    i = @cls.new "", :format => 'q'
     
     i.unframed_write([LLONG_MIN], 0)
-    assert_equal [LLONG_MIN], i.read(1,0)
+    assert_equal [[LLONG_MIN]], i.read(1,0)
     i.unframed_write([LLONG_MAX], 0)
-    assert_equal [LLONG_MAX], i.read(1,0)
+    assert_equal [[LLONG_MAX]], i.read(1,0)
   
     i.unframed_write([LLONG_MIN], 0)
-    assert_equal [LLONG_MIN], i.read(1,0)
+    assert_equal [[LLONG_MIN]], i.read(1,0)
     i.unframed_write([LLONG_MIN-1], 0)
-    assert_equal [LLONG_MAX], i.read(1,0)
+    assert_equal [[LLONG_MAX]], i.read(1,0)
   end
   
   def test_read_and_unframed_write_cycle_numerics_beyond_natural_range
     # S handles an unsigned short
-    i = @cls.new tempfile, :format => 'S'
+    i = @cls.new "", :format => 'S'
     
     i.unframed_write([-USHRT_MAX], 0)
-    assert_equal [1], i.read(1,0)
+    assert_equal [[1]], i.read(1,0)
     i.unframed_write([USHRT_MIN-1], 0)
-    assert_equal [USHRT_MAX], i.read(1,0)
+    assert_equal [[USHRT_MAX]], i.read(1,0)
   
     # s handles an signed short
-    i = @cls.new tempfile, :format => 's'
+    i = @cls.new "", :format => 's'
   
     i.unframed_write([SHRT_MIN], 0)
-    assert_equal [SHRT_MIN], i.read(1,0)
+    assert_equal [[SHRT_MIN]], i.read(1,0)
     i.unframed_write([SHRT_MIN-1], 0)
-    assert_equal [SHRT_MAX], i.read(1,0)
+    assert_equal [[SHRT_MAX]], i.read(1,0)
     
     # I,L handle an unsigned long
     ['I', 'L'].each do |format|
-      i = @cls.new tempfile, :format => format
+      i = @cls.new "", :format => format
       
       i.unframed_write([-ULONG_MAX], 0)
-      assert_equal [1], i.read(1,0)
+      assert_equal [[1]], i.read(1,0)
       i.unframed_write([ULONG_MIN-1], 0)
-      assert_equal [ULONG_MAX], i.read(1,0)
+      assert_equal [[ULONG_MAX]], i.read(1,0)
     end
     
     # i,l handle an signed long
     ['i', 'l'].each do |format|
-      i = @cls.new tempfile, :format => format
+      i = @cls.new "", :format => format
       
       i.unframed_write([LONG_MIN], 0)
-      assert_equal [LONG_MIN], i.read(1,0)
+      assert_equal [[LONG_MIN]], i.read(1,0)
       i.unframed_write([LONG_MIN-1], 0)
-      assert_equal [LONG_MAX], i.read(1,0)
+      assert_equal [[LONG_MAX]], i.read(1,0)
     end
   
     # Q handles an unsigned long long
-    i = @cls.new tempfile, :format => 'Q'
+    i = @cls.new "", :format => 'Q'
     
     i.unframed_write([-ULLONG_MAX], 0)
-    assert_equal [1], i.read(1,0)
+    assert_equal [[1]], i.read(1,0)
     i.unframed_write([ULLONG_MIN-1], 0)
-    assert_equal [ULLONG_MAX], i.read(1,0)
+    assert_equal [[ULLONG_MAX]], i.read(1,0)
     
     # q handles an signed long long
-    i = @cls.new tempfile, :format => 'q'
+    i = @cls.new "", :format => 'q'
     
     i.unframed_write([LLONG_MIN], 0)
-    assert_equal [LLONG_MIN], i.read(1,0)
+    assert_equal [[LLONG_MIN]], i.read(1,0)
     i.unframed_write([LLONG_MIN-1], 0)
-    assert_equal [LLONG_MAX], i.read(1,0)
+    assert_equal [[LLONG_MAX]], i.read(1,0)
   end
   
   def test_numerics_cycle_up_to_the_unsigned_max_in_either_sign
     # S,s,I,i,L,l all can cycle up to the size of an ULONG 
     ['S','s','I','i','L','l'].each do |format|
-      i = @cls.new tempfile, :format => format
+      i = @cls.new "", :format => format
       
       assert_raise(RangeError) { i.unframed_write([-(ULONG_MAX+1)]) }
       assert_raise(RangeError) { i.unframed_write([(ULONG_MAX+1)]) }
@@ -846,7 +868,7 @@ class ExternalIndexTest < Test::Unit::TestCase
     
     # Q,q can cycle up to the size of an ULLONG 
     ['Q', 'q'].each do |format|
-      i = @cls.new tempfile, :format => format
+      i = @cls.new "", :format => format
       
       assert_raise(RangeError) { i.unframed_write([-(ULLONG_MAX+1)]) }
       assert_raise(RangeError) { i.unframed_write([(ULLONG_MAX+1)]) }
@@ -1340,7 +1362,8 @@ class ExternalIndexTest < Test::Unit::TestCase
     assert_equal([0],  a.at(-100))
     assert_equal(nil, a.at(-101))
 
-    assert_raise(TypeError) { a.at('cat') }
+    # assert_raise(TypeError) { a.at('cat') }
+    assert_raise(ArgumentError) { a.at('cat') }
   end
   
   def test_collect

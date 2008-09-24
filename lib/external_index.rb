@@ -250,7 +250,7 @@ class ExternalIndex < External::Base
   # Differs from the Array << in that multiple entries
   # can be shifted on at once.  
   def <<(array)
-    #validate_length(array, 1)
+    #check_length(array, 1)
     unframed_write(array, length)
     self
   end
@@ -330,8 +330,7 @@ class ExternalIndex < External::Base
       end
       
       case 
-      when length == nil then read(1, index)    # read one, as index[0]
-      when length == 1 then [read(1, index)]    # read one framed, as index[0,1]
+      when length == nil then at(index)         # read one, as index[0]
       else read(length, index)                  # read length, automatic framing
       end 
       
@@ -478,7 +477,12 @@ class ExternalIndex < External::Base
 
   # Returns entry at index
   def at(index)
-    self[index]
+    if index >= length || (index < 0 && index < -length)
+      nil
+    else
+      str = readbytes(1, index)
+      str == nil ? nil : str.unpack(format)
+    end
   end
 
   # Removes all elements from _self_.
@@ -516,7 +520,7 @@ class ExternalIndex < External::Base
     when Array
       write(another, length)
     when ExternalIndex 
-      validate_index(another)
+      check_index(another)
       io.concat(another.io)
     else 
       raise TypeError.new("can't convert #{another.class} into ExternalIndex or Array")
@@ -543,11 +547,7 @@ class ExternalIndex < External::Base
       # special treatment for 1, because then read(1) => [...] rather
       # than [[...]].  when frame > 1, each will iterate over the 
       # element rather than pass it to the block directly
-      if length == 1
-        yield read(1)
-      else
-        read(length).each(&block)
-      end
+      read(length).each(&block)
     end
     self
   end
@@ -687,11 +687,7 @@ class ExternalIndex < External::Base
       # special treatment for 1, because then read(1) => [...] rather
       # than [[...]].  when frame > 1, each will iterate over the 
       # element rather than pass it to the block directly
-      if length == 1
-        yield read(1)
-      else
-        read(length, offset).reverse_each(&block)
-      end
+      read(length, offset).reverse_each(&block)
     end
     self
   end
@@ -719,11 +715,7 @@ class ExternalIndex < External::Base
 
   # Converts self to an array, or returns the cache if cached?.
   def to_a
-    case
-    when length == 0 then []
-    when length == 1 then [read(length, 0)]
-    else read(length, 0)
-    end
+    length == 0 ? [] : read(length, 0)
   end
 
   # def to_ary
@@ -769,50 +761,54 @@ class ExternalIndex < External::Base
   # IO-like methods
   ##################
   
-  # Sets the current position of the index.  Negative positions
-  # are counted from the end of the index (just as they are in
-  # an array).  Positions can be set beyond the actual length
-  # of the index (similar to an IO).
+  # Returns the current position of self (ie io.pos/frame_size).
+  # pos is often used as the default location for IO-like
+  # operations like read or write.
+  def pos
+    io.pos/frame_size
+  end
+  
+  # Sets the current position of the index.  Positions can be set beyond
+  # the actual length of the index, similar to an IO. Negative positions
+  # are counted back from the end of the index (just as they are in
+  # an array), but naturally raise an error if they count back to a
+  # position less than zero.
   #
-  #   i = ExternalIndex[[1],[2],[3]]
-  #   i.length                      # => 3
-  #   i.pos = 2; i.pos              # => 2
-  #   i.pos = -1; i.pos             # => 2
-  #   i.pos = 10; i.pos             # => 40
+  #   index = ExternalIndex[[1],[2],[3]]
+  #   index.length                          # => 3
+  #
+  #   index.pos = 2; index.pos              # => 2
+  #   index.pos = 10; index.pos             # => 10
+  #
+  #   index.pos = -1; index.pos             # => 2
+  #   index.pos = -10; index.pos            # !> ArgumentError
+  #
   def pos=(pos)
     if pos < 0
       raise ArgumentError.new("position out of bounds: #{pos}") if pos < -length
       pos += length 
     end
     
-    # do something fake for caching so that 
-    # the position need not be set (this 
-    # works either way)
     io.pos = (pos * frame_size)
-  end
-  
-  # Returns the current position of the index
-  def pos
-    io.pos/frame_size
   end
 
   # Reads the packed byte string for n entries from the specified 
-  # position. By default reads the string for all remaining entries
-  # from the current position.
+  # position. By default all remaining entries will be read.
   # 
-  #   i = ExternalIndex[[1],[2],[3]]
-  #   i.pos                              # => 0
-  #   i.readbytes.unpack("I*")           # => [1,2,3]
-  #   i.readbytes(1,0).unpack("I*")      # => [1]
-  #   i.readbytes(10,1).unpack("I*")     # => [2,3]
+  #   index = ExternalIndex[[1],[2],[3]]
+  #   index.pos                              # => 0
+  #   index.readbytes.unpack("I*")           # => [1,2,3]
+  #   index.readbytes(1,0).unpack("I*")      # => [1]
+  #   index.readbytes(10,1).unpack("I*")     # => [2,3]
   #
-  # Like an IO, when n is nil and no entries can be read, an empty
-  # string is returned.  When n is specified, nil will be returned
-  # when no entries can be read.
+  # The behavior of readbytes when no entries can be read echos
+  # that of IO; when n is nil, an empty string is returned;
+  # when n is specified, nil will be returned.
   #
-  #   i.pos = 3
-  #   i.readbytes                        # => ""
-  #   i.readbytes(1)                     # => nil
+  #   index.pos = 3
+  #   index.readbytes                        # => ""
+  #   index.readbytes(1)                     # => nil
+  #
   def readbytes(n=nil, pos=nil)
     # set the io position to the specified index
     self.pos = pos unless pos == nil
@@ -822,48 +818,49 @@ class ExternalIndex < External::Base
   end
   
   # Unpacks the given string into an array of index values.
-  # Single entries are returned in frame, multiple entries 
-  # are returned in an array.
+  # Entries are returned in frame.
   #
-  #   i.format                          # => 'I*'
-  #   i.unpack( [1].pack('I*') )        # => [1] 
-  #   i.unpack( [1,2,3].pack('I*') )    # => [[1],[2],[3]]
-  #   i.unpack("")                      # => []
+  #   index = ExternalIndex[[1],[2],[3]]
+  #   index.format                          # => 'I*'
+  #   index.unpack( [1].pack('I*') )        # => [[1]] 
+  #   index.unpack( [1,2,3].pack('I*') )    # => [[1],[2],[3]]
+  #   index.unpack("")                      # => []
   #   
   def unpack(str)
     case
-    when str.empty? then []
-    when str.length == frame_size 
-      str.unpack(format)
     when process_in_bulk
+      # multiple entries, bulk processing (faster)
       results = []
       str.unpack(format).each_slice(frame) {|s| results << s}
       results
     else
+      # multiple entries, individual unpacking (slower)
       Array.new(str.length/frame_size) do |i|
         str[i*frame_size, frame_size].unpack(format)
       end
     end
   end
 
-  # Reads n entries from the specified position. By default 
-  # reads all remaining entries from the current position.
-  # Single entries are returned in frame, multiple entries 
-  # are returned in an array.
+  # Reads n entries from the specified position (ie, read
+  # is basically readbytes, then unpack). By default all 
+  # remaining entries will be read; single entries are 
+  # returned in frame, multiple entries are returned in 
+  # an array.
   #
-  #   i = ExternalIndex[[1],[2],[3]]
-  #   i.pos                       # => 0
-  #   i.read                      # => [[1],[2],[3]]
-  #   i.read(1,0)                 # => [1]
-  #   i.read(10,1)                # => [[2],[3]]
+  #   index = ExternalIndex[[1],[2],[3]]
+  #   index.pos                       # => 0
+  #   index.read                      # => [[1],[2],[3]]
+  #   index.read(1,0)                 # => [[1]]
+  #   index.read(10,1)                # => [[2],[3]]
   # 
-  # When n is nil and no entries can be read, an empty array
-  # is returned.  When n is specified, nil will be returned
-  # when no entries can be read.
+  # The behavior of read when no entries can be read echos
+  # that of IO; when n is nil, an empty array is returned;
+  # when n is specified, nil will be returned.
   #
-  #   i.pos = 3
-  #   i.read                      # => []
-  #   i.read(1)                   # => nil       
+  #   index.pos = 3
+  #   index.read                      # => []
+  #   index.read(1)                   # => nil
+  #    
   def read(n=nil, pos=nil)
     str = readbytes(n, pos)
     str == nil ? nil : unpack(str)
@@ -874,36 +871,26 @@ class ExternalIndex < External::Base
   # current position.  The array can have multiple entries
   # so long as each is in the correct frame.
   #
-  #   i = ExternalIndex[]
-  #   i.write([[2],[3]], 1)
-  #   i.pos = 0; 
-  #   i.write([[1]])
-  #   i.read(3, 0)                # => [[1],[2],[3]]
+  #   index = ExternalIndex[]
+  #   index.write([[2],[3]], 1)
+  #   index.pos = 0; 
+  #   index.write([[1]])
+  #   index.read(3, 0)                # => [[1],[2],[3]]
   #
-  # write may accept another ExternalIndex with corresponding
-  # index_attrs.
-  #
-  # Note! -- for performance reasons write does 
-  # NOT check to make sure entries are valid when cached?.
-  # Naturally, you will, however, get errors if you try to
-  # uncache or write a corrupted index.
-  #
-  #   i.cached = true    
-  #   i.write([["cat"]])   # no error
-  #   i.last                    # => ["cat"]
-  #   i.cached = false          # => TypeError
+  # write may accept an ExternalIndex if it has the same
+  # index_attrs as self.
   def write(array, pos=nil)
     case array
     when Array
-      validate_framed_array(array)
+      check_framed_array(array)
       prepare_write_to_pos(pos)
       write_framed_array(array)
     when ExternalIndex
-      validate_index(array)
+      check_index(array)
       prepare_write_to_pos(pos)
       write_index(array)
     else  
-      raise ArgumentError.new("could not convert #{array.class} to Array or ExternalIndex")
+      raise ArgumentError, "could not convert #{array.class} to Array or ExternalIndex"
     end
   end
   
@@ -912,20 +899,20 @@ class ExternalIndex < External::Base
   # so long as the total number of elements is divisible 
   # into entries of the correct frame.
   #
-  #   i = ExternalIndex[]
-  #   i.unframed_write([2,3], 1)
-  #   i.pos = 0; 
-  #   i.unframed_write([1])
-  #   i.read(3, 0)                # => [[1],[2],[3]]
+  #   index = ExternalIndex[]
+  #   index.unframed_write([2,3], 1)
+  #   index.pos = 0; 
+  #   index.unframed_write([1])
+  #   index.read(3, 0)                # => [[1],[2],[3]]
   #
   def unframed_write(array, pos=nil)
     case array
     when Array
-      validate_unframed_array(array)
+      check_unframed_array(array)
       prepare_write_to_pos(pos)
       write_unframed_array(array)
     when ExternalIndex
-      validate_index(array)
+      check_index(array)
       prepare_write_to_pos(pos)
       write_index(array)
     else  
@@ -933,10 +920,20 @@ class ExternalIndex < External::Base
     end
   end
   
-  protected
+  private
 
-  attr_accessor :cache_pos # :nodoc:
-   
+  # helper method to inspect large arrays
+  def ellipse_inspect(array) # :nodoc:
+    if array.length > 10
+      "[#{array[0,5].join(', ')} ... #{array[-5,5].join(', ')}] (length = #{array.length})"
+    else
+      "[#{array.join(', ')}]"
+    end
+  end
+  
+  # prepares a write at the specified position by
+  # padding to the position and setting pos to
+  # the position
   def prepare_write_to_pos(pos) # :nodoc:
     unless pos == nil
       # pad to the starting position if necessary
@@ -947,6 +944,7 @@ class ExternalIndex < External::Base
     end
   end
   
+  # pads io with nil_value up to pos.
   def pad_to(pos) # :nodoc:
     n = (pos-length)/frame
       
@@ -958,54 +956,49 @@ class ExternalIndex < External::Base
     # to skip the set statement below
     pos = nil
   end
-
-  def validate_index(index) # :nodoc:
+  
+  # checks that the input has the same index_attrs as self.
+  def check_index(index) # :nodoc:
     unless index.index_attrs == index_attrs
       raise ArgumentError.new("incompatible index attributes [#{index.index_attrs.join(',')}]") 
     end
   end
   
-  def validate_framed_array(array) # :nodoc:
+  # checks that the array consists only of 
+  # arrays of the correct frame, or nils.
+  def check_framed_array(array) # :nodoc:
     array.each do |item| 
       case item
       when Array
+        
+        # validate the frame of the array
         unless item.length == frame
-          raise ArgumentError.new("expected array in frame '#{frame}' but was '#{item.length}'") 
+          raise ArgumentError, "not in frame #{frame}: #{ellipse_inspect(item)}"
         end
-      when nil 
-        # framed arrays can contain nils
-        next
-      else
-        raise ArgumentError.new("expected array in frame '#{frame}', was #{item.class}")
+        
+      when nil # framed arrays can contain nils
+      else raise ArgumentError, "not an Array or nil value: #{item.class} "
       end
     end
   end
   
-  def validate_unframed_array(array) # :nodoc:
+  # checks that the unframed array is of a 
+  # frameable length
+  def check_unframed_array(array) # :nodoc:
     unless array.length % frame == 0
-      raise ArgumentError.new("expected array in frame '#{frame}' but was '#{array.length}'") 
+      raise ArgumentError, "not in frame #{frame}: #{ellipse_inspect(array)}"
     end
   end
   
-  def validate_length(obj, n) # :nodoc:
-    unless obj.respond_to?(:length)
-      raise ArgumentError.new("could not determine length of #{obj}") 
-    end
-    
-    unless obj.length == n * frame
-      raise ArgumentError.new("expected #{n} entries, but was #{obj.length.to_f/frame}") 
-    end
-  end
-  
+  # writes the ExternalIndex to io.
   def write_index(index) # :nodoc:
     end_pos = io.pos + io.insert(index.io)
     io.length = end_pos if end_pos > io.length
   end
   
+  # writes the framed array to io.  nil values
+  # in the array are converted to nil_value.
   def write_framed_array(array) # :nodoc:
-    # framed arrays may contain nils, and must
-    # be resolved before writing the data
-    
     start_pos = io.pos
     length_written = 0
     
@@ -1015,18 +1008,18 @@ class ExternalIndex < External::Base
       length_written += io.write(arr.pack(format))
     else
       array.each do |item|
-        str = (item == nil ? nil_value(false) : item.pack(format))
-        length_written += io.write(str)
+        length_written += io.write(item == nil ? nil_value(false) : item.pack(format))
       end
     end
-  
+    
+    # update io.length as necessary
     end_pos = start_pos + length_written
     io.length = end_pos if end_pos > io.length
   end
   
+  # writes the unframed array to io.  unframed
+  # arrays cannot contain nils.
   def write_unframed_array(array) # :nodoc:
-    # unframed arrays cannot contain nils
-    
     start_pos = io.pos
     length_written = 0
     
@@ -1037,7 +1030,8 @@ class ExternalIndex < External::Base
         length_written += io.write(arr.pack(format))
       end
     end
-  
+    
+    # update io.length as necessary
     end_pos = start_pos + length_written
     io.length = end_pos if end_pos > io.length
   end
