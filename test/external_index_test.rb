@@ -727,7 +727,7 @@ class ExternalIndexTest < Test::Unit::TestCase
   
   def test_read_and_unframed_write_handles_full_numeric_range_for_numeric_formats
     # S handles an unsigned short
-    i = @cls.new "", :format => 'S'
+    i = ExternalIndex.new "", :format => 'S'
     
     i.unframed_write([USHRT_MIN], 0)
     assert_equal [[USHRT_MIN]], i.read(1,0)
@@ -738,7 +738,7 @@ class ExternalIndexTest < Test::Unit::TestCase
     assert_equal [[USHRT_MAX]], i.read(1,0)
   
     # s handles an signed short
-    i = @cls.new "", :format => 's'
+    i = ExternalIndex.new "", :format => 's'
     
     i.unframed_write([SHRT_MIN], 0)
     assert_equal [[SHRT_MIN]], i.read(1,0)
@@ -752,7 +752,7 @@ class ExternalIndexTest < Test::Unit::TestCase
     
     # I,L handle an unsigned long
     ['I', 'L'].each do |format|
-      i = @cls.new "", :format => format
+      i = ExternalIndex.new "", :format => format
       
       i.unframed_write([ULONG_MIN], 0)
       assert_equal [[ULONG_MIN]], i.read(1,0)
@@ -765,7 +765,7 @@ class ExternalIndexTest < Test::Unit::TestCase
     
     # i,l handle an signed long
     ['i', 'l'].each do |format|
-      i = @cls.new "", :format => format
+      i = ExternalIndex.new "", :format => format
       
       i.unframed_write([LONG_MIN], 0)
       assert_equal [[LONG_MIN]], i.read(1,0)
@@ -779,7 +779,7 @@ class ExternalIndexTest < Test::Unit::TestCase
     end
   
     # Q handles an unsigned long long
-    i = @cls.new "", :format => 'Q'
+    i = ExternalIndex.new "", :format => 'Q'
     
     i.unframed_write([ULLONG_MIN], 0)
     assert_equal [[ULLONG_MIN]], i.read(1,0)
@@ -790,7 +790,7 @@ class ExternalIndexTest < Test::Unit::TestCase
     assert_equal [[ULLONG_MAX]], i.read(1,0)
     
     # q handles an signed long long
-    i = @cls.new "", :format => 'q'
+    i = ExternalIndex.new "", :format => 'q'
     
     i.unframed_write([LLONG_MIN], 0)
     assert_equal [[LLONG_MIN]], i.read(1,0)
@@ -805,7 +805,7 @@ class ExternalIndexTest < Test::Unit::TestCase
   
   def test_read_and_unframed_write_cycle_numerics_beyond_natural_range
     # S handles an unsigned short
-    i = @cls.new "", :format => 'S'
+    i = ExternalIndex.new "", :format => 'S'
     
     i.unframed_write([-USHRT_MAX], 0)
     assert_equal [[1]], i.read(1,0)
@@ -813,7 +813,7 @@ class ExternalIndexTest < Test::Unit::TestCase
     assert_equal [[USHRT_MAX]], i.read(1,0)
   
     # s handles an signed short
-    i = @cls.new "", :format => 's'
+    i = ExternalIndex.new "", :format => 's'
   
     i.unframed_write([SHRT_MIN], 0)
     assert_equal [[SHRT_MIN]], i.read(1,0)
@@ -822,7 +822,7 @@ class ExternalIndexTest < Test::Unit::TestCase
     
     # I,L handle an unsigned long
     ['I', 'L'].each do |format|
-      i = @cls.new "", :format => format
+      i = ExternalIndex.new "", :format => format
       
       i.unframed_write([-ULONG_MAX], 0)
       assert_equal [[1]], i.read(1,0)
@@ -832,7 +832,7 @@ class ExternalIndexTest < Test::Unit::TestCase
     
     # i,l handle an signed long
     ['i', 'l'].each do |format|
-      i = @cls.new "", :format => format
+      i = ExternalIndex.new "", :format => format
       
       i.unframed_write([LONG_MIN], 0)
       assert_equal [[LONG_MIN]], i.read(1,0)
@@ -841,7 +841,7 @@ class ExternalIndexTest < Test::Unit::TestCase
     end
   
     # Q handles an unsigned long long
-    i = @cls.new "", :format => 'Q'
+    i = ExternalIndex.new "", :format => 'Q'
     
     i.unframed_write([-ULLONG_MAX], 0)
     assert_equal [[1]], i.read(1,0)
@@ -849,7 +849,7 @@ class ExternalIndexTest < Test::Unit::TestCase
     assert_equal [[ULLONG_MAX]], i.read(1,0)
     
     # q handles an signed long long
-    i = @cls.new "", :format => 'q'
+    i = ExternalIndex.new "", :format => 'q'
     
     i.unframed_write([LLONG_MIN], 0)
     assert_equal [[LLONG_MIN]], i.read(1,0)
@@ -860,7 +860,7 @@ class ExternalIndexTest < Test::Unit::TestCase
   def test_numerics_cycle_up_to_the_unsigned_max_in_either_sign
     # S,s,I,i,L,l all can cycle up to the size of an ULONG 
     ['S','s','I','i','L','l'].each do |format|
-      i = @cls.new "", :format => format
+      i = ExternalIndex.new "", :format => format
       
       assert_raise(RangeError) { i.unframed_write([-(ULONG_MAX+1)]) }
       assert_raise(RangeError) { i.unframed_write([(ULONG_MAX+1)]) }
@@ -868,7 +868,7 @@ class ExternalIndexTest < Test::Unit::TestCase
     
     # Q,q can cycle up to the size of an ULLONG 
     ['Q', 'q'].each do |format|
-      i = @cls.new "", :format => format
+      i = ExternalIndex.new "", :format => format
       
       assert_raise(RangeError) { i.unframed_write([-(ULLONG_MAX+1)]) }
       assert_raise(RangeError) { i.unframed_write([(ULLONG_MAX+1)]) }
@@ -1578,4 +1578,64 @@ class ExternalIndexTest < Test::Unit::TestCase
     assert_raise(ArgumentError) { a[0,1] = b }
   end
   
+  #######################
+  # Benchmark tests
+  #######################
+
+  #
+  # benchmarks
+  #
+  
+  def bm_test(mode, length=20, array=nil, &block)
+    array = Array.new(10000) {|i| i } if array == nil
+
+    benchmark_test(length) do |x|
+      ['I', 'IIIIIIIIII'].each do |format|
+        Tempfile.open('benchmark') do |file|
+          file << array.pack('I*')
+          
+          begin
+            index = ExternalIndex.new(file, :format => format)  
+            yield(x, format, index)
+          ensure
+            index.close if index
+          end
+        end
+      end
+      
+      yield(x, "array reference", array)
+    end
+  end
+  
+  def test_ExternalIndex_element_reference_speed
+    n = 100
+    bm_test('r') do |x, type, index|
+      puts type
+      
+      x.report("#{n}kx at(index)") { (n*1000).times { index.at(1000) } }
+      x.report("#{n}kx [index]")   { (n*1000).times { index[1000] } }
+      x.report("#{n}kx [range]")   { (n*1000).times { index[1000..1000] } }
+      x.report("#{n}kx [s,1]")     { (n*1000).times { index[1000, 1] } }
+      x.report("#{n}kx [s,10]")    { (n*1000).times { index[1000, 10] } } 
+    end
+  end
+
+  def test_ExternalIndex_element_assignment_speed
+    bm_test('r+') do |x, type, index|
+     puts type
+      
+      n = 10
+      obj = Array.new(index.respond_to?(:frame) ? index.frame : 1, 0)
+      
+      x.report("#{n}kx [index]=") do 
+        (n*1000).times { index[1000] = obj} 
+      end      
+      x.report("#{n}kx [range]=") do 
+        (n*1000).times { index[1000..1000] = [obj] } 
+      end  
+      x.report("#{n}kx [s,1]=") do 
+        (n*1000).times { index[1000,1] = [obj] } 
+      end
+    end
+  end
 end

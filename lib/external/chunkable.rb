@@ -83,11 +83,11 @@ module External
     #   split_range(-1..9)    # => [9,1]
     #   split_range(0..-1)    # => [0,10]
     def split_range(range)
-      begin_range = range.begin + (range.begin < 0 ? self.length : 0)
-      end_range = range.end + (range.end < 0 ? self.length : 0)
-      length = end_range - begin_range - (range.exclude_end? ? 1 : 0)
-
-      [begin_range, length]
+      start, finish = range.begin, range.end
+      start += length if start < 0
+      finish += length if finish < 0
+      
+      [start, finish - start - (range.exclude_end? ? 1 : 0) ]
     end
     
     # The compliment to split_range; returns the span with a negative

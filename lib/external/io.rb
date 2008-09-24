@@ -149,9 +149,10 @@ module External
       self == another || (self.kind_of?(File) && another.kind_of?(File) && self.path == another.path)
     end
 
-    # Sort compare with another IO, behaving like a comparison between
-    # the full string contents of self and another.  Can be a long 
-    # operation if it requires the full read of two large IO objects.
+    # Sort compare (ie <=>) with another IO, behaving like 
+    # a comparison between the full string contents of self 
+    # and another.  This obviously can be a long operation
+    # if it requires the full read of two large IO objects.
     def sort_compare(another, blksize=default_blksize)
       # equal in comparison if the ios are equal
       return 0 if quick_compare(another)
@@ -181,9 +182,7 @@ module External
       end
     end
     
-    # Sort compare with another IO, behaving like a comparison between
-    # the full string contents of self and another.  Can be a long 
-    # operation if it requires the full read of two large IO objects.
+    # Alias for sort_compare.
     def <=>(another)
       sort_compare(another)
     end

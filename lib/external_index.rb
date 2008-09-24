@@ -250,7 +250,6 @@ class ExternalIndex < External::Base
   # Differs from the Array << in that multiple entries
   # can be shifted on at once.  
   def <<(array)
-    #check_length(array, 1)
     unframed_write(array, length)
     self
   end
@@ -313,41 +312,48 @@ class ExternalIndex < External::Base
   #   i[5..10]               #=> []
   #
   # Note that entries are returned in frame, as arrays.
-  def [](index, length=nil)
-    case index
+  def [](one, two = nil)
+    case one
     when Fixnum
-      index += self.length if index < 0
-      return nil if index < 0
+      one += length if one < 0
+      return nil if one < 0
 
-      unless length == nil
-        raise TypeError.new("no implicit conversion from nil to integer") if length.nil?
-        return [] if length == 0 || index >= self.length
-        return nil if length < 0
-        
-        # ensure you don't try to read more entries than are available
-        max_length = self.length - index
-        length = max_length if length > max_length
+      unless two == nil
+        raise TypeError, "no implicit conversion from nil to integer" if two.nil?
+        return [] if two == 0 || one >= length
+        return nil if two < 0
       end
       
-      case 
-      when length == nil then at(index)         # read one, as index[0]
-      else read(length, index)                  # read length, automatic framing
-      end 
+      if two == nil 
+        at(one)            # read one, no frame
+      else 
+        read(two, one)     # read length, framed
+      end
       
     when Range
-      raise TypeError.new("can't convert Range into Integer") unless length == nil
-  
-      offset, length = split_range(index)
-  
-      # for conformance with array range retrieval
-      return nil if offset < 0 || offset > self.length
-      return [] if length < 0
+      raise TypeError, "can't convert Range into Integer" unless two == nil
+      # total is the length of self
+      total = length
       
-      self[offset, length + 1]
+      # split the range
+      start, finish = one.begin, one.end
+      start += total if start < 0
+      finish += total if finish < 0
+      
+      length = finish - start
+      length -= 1 if one.exclude_end?
+  
+      # checks for conformance with array range retrieval
+      return nil if start < 0 || start > total
+      return [] if length < 0 || start == total
+      
+      # read framed results
+      read(length + 1, start)
+      
     when nil
-      raise TypeError.new("no implicit conversion from nil to integer")
+      raise TypeError, "no implicit conversion from nil to integer"
     else
-      raise TypeError.new("can't convert #{index.class} into Integer") 
+      raise TypeError, "can't convert #{one.class} into Integer"
     end
   end
 
