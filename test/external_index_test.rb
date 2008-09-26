@@ -880,18 +880,17 @@ class ExternalIndexTest < Test::Unit::TestCase
   #############################
   
   def test_AREF_doc
-    io = StringIO.new [1,2,3,4,5].pack("I*")
-    i = ExternalIndex.new(io, :format => 'I')
-    assert_equal [3], i[2]
-    assert_equal nil, i[6]
-    assert_equal [[2],[3]], i[1,2]
-    assert_equal [[2],[3],[4]], i[1..3]
-    assert_equal [[5]], i[4..7]
-    assert_equal nil, i[6..10]
-    assert_equal [[3],[4],[5]], i[-3,3]
-    assert_equal nil, i[5]
-    assert_equal [], i[5,1]
-    assert_equal [], i[5..10]
+    index = ExternalIndex[1,2,3,4,5]
+    assert_equal [3], index[2]
+    assert_equal nil, index[6]
+    assert_equal [[2],[3]], index[1,2]
+    assert_equal [[2],[3],[4]], index[1..3]
+    assert_equal [[5]], index[4..7]
+    assert_equal nil, index[6..10]
+    assert_equal [[3],[4],[5]], index[-3,3]
+    assert_equal nil, index[5]
+    assert_equal [], index[5,1]
+    assert_equal [], index[5..10]
   end
   
   def test_ASET_doc

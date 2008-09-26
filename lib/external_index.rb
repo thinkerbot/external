@@ -142,13 +142,19 @@ class ExternalIndex < External::Base
       end
     end
     
+    # The "a" and "A" directives cannot be
+    # processed in bulk.
+    if ['a','A'].include?(bulk_directive)
+      @process_in_bulk = false
+    end
+    
     # Repetitive formats like "I", "II", "I2I", 
     # etc can be packed and unpacked in bulk.
     @format = process_in_bulk ? "#{bulk_directive}*" : format
-
+    
     # set the buffer size
     self.buffer_size = options[:buffer_size]
-
+    
     # set the nil value to an array of zeros, or
     # to the specified nil value.  If a nil value
     # was specified, ensure it is of the correct
@@ -297,21 +303,21 @@ class ExternalIndex < External::Base
   # by range. Negative indices count backward from the end of self (-1 is the last 
   # element). Returns nil if the index (or starting index) is out of range.
   #
-  #   io = StringIO.new [1,2,3,4,5].pack("I*")
-  #   i = ExternalIndex.new(io, :format => 'I')
-  #   i[2]                   #=> [3]
-  #   i[6]                   #=> nil
-  #   i[1, 2]                #=> [ [2], [3] ]
-  #   i[1..3]                #=> [ [2], [3], [4] ]
-  #   i[4..7]                #=> [ [5] ]
-  #   i[6..10]               #=> nil
-  #   i[-3, 3]               #=> [ [3], [4], [5] ]
-  #   # special cases
-  #   i[5]                   #=> nil
-  #   i[5, 1]                #=> []
-  #   i[5..10]               #=> []
+  #   index = ExternalIndex[1,2,3,4,5]
+  #   index[2]                   #=> [3]
+  #   index[6]                   #=> nil
+  #   index[1, 2]                #=> [[2],[3]]
+  #   index[1..3]                #=> [[2],[3],[4]]
+  #   index[4..7]                #=> [[5]]
+  #   index[6..10]               #=> nil
+  #   index[-3, 3]               #=> [[3],[4],[5]]
   #
-  # Note that entries are returned in frame, as arrays.
+  #   # special cases
+  #   index[5]                   #=> nil
+  #   index[5, 1]                #=> []
+  #   index[5..10]               #=> []
+  #
+  # Note that entries are returned in frame.
   def [](one, two = nil)
     one = convert_to_int(one)
     
@@ -381,38 +387,38 @@ class ExternalIndex < External::Base
   #   i[-1]   = [9]                # => [[8], [9]]
   #   i[1..-1] = nil               # => [[8]]
   #
-  # Note that []= must take entries in frame, or (in the case of [offset, length] and 
+  # Note that []= can only take entries in frame, or (in the case of [offset, length] and 
   # range insertions) another ExternalIndex with the same frame, format, and nil_value.
   #--
   # TODO -- cleanup error messages so they are more meaningful 
   # and helpful, esp for frame errors
   #++
   def []=(*args)
-    raise ArgumentError.new("wrong number of arguments (1 for 2)") if args.length < 2
-    index, length, value = args
+    raise ArgumentError, "wrong number of arguments (1 for 2)" if args.length < 2
+    
+    one, two, value = args
     if args.length == 2
-      value = length 
-      length = nil
+      value = two 
+      two = nil
     end
 
-    case index
+    one = convert_to_int(one)
+    case one
     when Fixnum
-      if index < 0
-        index += self.length
-        raise IndexError.new("index #{index} out of range") if index  < 0
+      if one < 0
+        one += length
+        raise IndexError, "index #{one} out of range" if one  < 0
       end
       
-      if length == nil
+      if two == nil
         # simple insertion 
-        value = nil_value if value.object_id == 4 # nil
-        unframed_write(value, index)
+        unframed_write(value == nil ? nil_value : value, one)
       else
-        raise IndexError.new("negative length (#{length})") if length < 0
+        two = convert_to_int(two)
+        raise IndexError, "negative length (#{two})" if two < 0
         
-        # arrayify value if needed
-        unless value.kind_of?(ExternalIndex)
-          value = [value] unless value.kind_of?(Array)
-        end
+        value = [] if value == nil
+        value = convert_to_ary(value)
         
         case
         when self == value
@@ -420,62 +426,78 @@ class ExternalIndex < External::Base
           # A whole copy of self is required because the insertion 
           # can overwrite the tail of self.  As such this can be a
           # worst-case scenario-slow and expensive procedure.
-          copy_beg = (index + length) * frame_size
+          copy_beg = (one + two) * frame_size
           copy_end = io.length
-          
+        
           io.copy do |copy|
             # truncate io
-            io.truncate(index * frame_size)
+            io.truncate(one * frame_size)
             io.pos = io.length
-            
+        
             # pad as needed
-            pad_to(index) if index > self.length
-            
+            pad_to(one) if one > length
+        
             # write the copy of self
             io.insert(copy)
-            
+        
             # copy the tail of the insertion
             io.insert(copy, copy_beg..copy_end)
           end
-        when value.length == length
+        
+        when value.length == two
           # optimized insertion, when insertion is the correct length
-          write(value, index)
+          write(value, one)
+        
         else
           # range insertion: requires copy and rewrite of the tail 
           # of the ExternalIndex, after the insertion.
           # WARN - can be slow when the tail is large
-          copy_beg = (index + length) * frame_size
+          copy_beg = (one + two) * frame_size
           copy_end = io.length
-          
+        
           io.copy("r", copy_beg..copy_end) do |copy|
             # pad as needed
-            pad_to(index) if index > self.length
-            
+            pad_to(one) if one > length
+        
             # write inserted value
-            io.pos = index * frame_size
+            io.pos = one * frame_size
             write(value)
-            
+        
             # truncate io
             io.truncate(io.pos)
-
+        
             # copy the tail of the insertion
             io.insert(copy)
           end
         end
       end
-      
-      value
+
     when Range
-      raise TypeError.new("can't convert Range into Integer") if args.length == 3 
+      raise TypeError, "can't convert Range into Integer" unless two == nil
       
-      # for conformance with setting a range with nil (truncates)
-      value = [] if value.nil?
-      offset, length = split_range(index)
-      self[offset, length + 1] = value
+      # total is the length of self
+      total = length
+      
+      # split the range
+      start = convert_to_int(one.begin)
+      raise TypeError, "can't convert #{one.begin.class} into Integer" unless start.kind_of?(Integer)
+      start += total if start < 0
+      
+      finish = convert_to_int(one.end)
+      raise TypeError, "can't convert #{one.end.class} into Integer" unless finish.kind_of?(Integer)
+      finish += total if finish < 0
+      
+      length = finish - start
+      length -= 1 if one.exclude_end?
+      
+      raise RangeError, "#{one} out of range" if start < 0
+      
+      self[start, length < 0 ? 0 : length + 1] = value
+
     when nil
-      raise TypeError.new("no implicit conversion from nil to integer")
+      raise TypeError, "no implicit conversion from nil to integer"
     else
-      raise TypeError.new("can't convert #{index.class} into Integer") 
+      raise TypeError, "can't convert #{one.class} into Integer"
     end
   end
 
@@ -729,10 +751,11 @@ class ExternalIndex < External::Base
   def to_a
     length == 0 ? [] : read(length, 0)
   end
-
-  # def to_ary
-  #   not_implemented
-  # end
+  
+  # Returns self.
+  def to_ary
+    self
+  end
 
   # Returns _self_.join.
   # def to_s
@@ -940,13 +963,10 @@ class ExternalIndex < External::Base
     obj.respond_to?(:to_int) ? obj.to_int : obj
   end
   
-  # helper to inspect large arrays
-  def ellipse_inspect(array) # :nodoc:
-    if array.length > 10
-      "[#{array[0,5].join(', ')} ... #{array[-5,5].join(', ')}] (length = #{array.length})"
-    else
-      "[#{array.join(', ')}]"
-    end
+  # converts obj to an array using the <tt>to_ary</tt>
+  # method, if the object responds to <tt>to_ary</tt>
+  def convert_to_ary(obj)  # :nodoc:
+    obj.respond_to?(:to_ary) ? obj.to_ary : obj
   end
   
   # prepares a write at the specified position by

@@ -73,7 +73,7 @@ module ArraySpecs
   #   a
   # end
   # 
-  class MyArray < ExternalArray; end
+  class MyArray < Array; end
   # 
   # class Sexp < Array
   #   def initialize(*args)
@@ -81,9 +81,9 @@ module ArraySpecs
   #   end
   # end
   # 
-  # class ToAryArray < ExternalArray
-  #   def to_ary() ["to_ary", "was", "called!"] end
-  # end
+  class ToAryArray < Array
+    def to_ary() ["to_ary", "was", "called!"] end
+  end
   
   class MyRange < Range; end
   # 

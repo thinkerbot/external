@@ -107,12 +107,31 @@ module External
       raise NotImplementedError
     end
     
+    def inspect
+      "#<#{self.class}:#{object_id} #{ellipse_inspect(self)}>"
+    end
+    
     protected
     
     # Sets io and extends the input io with Io.
     def io=(io)
       io.extend Io unless io.kind_of?(Io)
       @io = io
+    end
+    
+    # helper to inspect large arrays
+    def ellipse_inspect(array) # :nodoc:
+      if array.length > 10
+        "[#{collect_join(array[0,5])} ... #{collect_join(array[-5,5])}] (length = #{array.length})"
+      else
+        "[#{collect_join(array.to_a)}]"
+      end
+    end
+    
+    def collect_join(array) # :nodoc:
+      array.collect do |obj|
+        obj.inspect
+      end.join(', ')
     end
     
   end
