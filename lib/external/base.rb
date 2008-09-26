@@ -44,12 +44,8 @@ module External
     # The underlying io for self.
     attr_reader :io
     
-    # The default tempfile basename for Base instances
-    # initialized without an io.
-    TEMPFILE_BASENAME = "external_base"
-    
-    # Creates a new instance of self with the specified io.  If io==nil,
-    # a Tempfile initialized to TEMPFILE_BASENAME is used.
+    # Creates a new instance of self with the specified io.  
+    # A nil or string io will be converted into a StringIO.
     def initialize(io=nil)
       self.io = case io
       when nil, String 

@@ -38,38 +38,6 @@ class ExternalArrayTest < Test::Unit::TestCase
   end
   
   #
-  # doc tests
-  #
-  
-  # def test_readme_doc_for_ext_arr
-  #   ea = ExternalArray[1, 2.2, "cat", {:key => 'value'}]
-  #   assert_equal "cat", ea[2]  
-  #   assert_equal({:key => 'value'}, ea.last)
-  #   ea << [:a, :b]
-  #   assert_equal [1, 2.2, "cat", {:key => 'value'}, [:a, :b]], ea.to_a 
-  #   
-  #   assert_equal Tempfile, ea.io.class 
-  #   ea.io.rewind
-  #   assert_equal "--- 1\n--- 2.2\n--- cat\n--- \n:key: value\n--- \n- :a\n- :b\n", ea.io.read
-  # 
-  #   assert_equal ExternalIndex, ea.io_index.class 
-  #   assert_equal [[0, 6], [6, 8], [14, 8], [22, 17], [39, 15]], ea.io_index.to_a  
-  #   
-  #   Tempfile.open("test_readme_doc_for_ext_arr") do |file|
-  #     file << "--- 1\n--- 2.2\n--- cat\n--- \n:key: value\n--- \n- :a\n- :b\n"
-  #     file.flush
-  # 
-  #     index_filepath = ExternalArray.default_index_filepath(file.path)
-  #     assert !File.exists?(index_filepath)
-  # 
-  #     ea = ExternalArray.new(file)
-  #     assert_equal [], ea.to_a 
-  #     ea.reindex 
-  #     assert_equal [1, 2.2, "cat", {:key => 'value'}, [:a, :b]], ea.to_a
-  #   end
-  # end
-  
-  #
   # test setup
   #
   

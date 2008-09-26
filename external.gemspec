@@ -15,6 +15,7 @@ Gem::Specification.new do |s|
   
   # list extra rdoc files here.
   s.extra_rdoc_files = %W{
+    MIT-LICENSE
     README
   }
   

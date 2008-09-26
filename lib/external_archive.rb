@@ -46,14 +46,17 @@ class ExternalArchive < External::Base
     end
     
     def open(fd=nil, mode="rb", options={})
-      io_index = ExternalIndex.open(
-        index_path(options[:index] || fd), 
-        mode,  
-        options.merge(:format => 'II'))
-        
-      fd = File.open(fd, mode) unless fd == nil
+      index_fd = index_path(options[:index] || fd)
+      index_fd = File.exists?(index_fd) ? index_fd : nil
       
-      extarc = self.new(fd, io_index)
+      extarc = self.new(
+        fd == nil ? nil : File.open(fd, mode),
+        ExternalIndex.open(index_fd, mode, options.merge(:format => 'II')))
+      
+      # reindex if necessary
+      if extarc.empty? && extarc.io.length > 0
+        extarc.reindex
+      end
       
       if block_given?
         begin

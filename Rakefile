@@ -70,6 +70,24 @@ Rake::RDocTask.new(:rdoc) do |rdoc|
   rdoc.options << '--fmt' << 'tdoc'
 end
 
+task :copy_docs do 
+  FileUtils.cp_r('docs', 'rdoc/docs')
+end
+
+desc "Publish RDoc to RubyForge"
+task :publish_rdoc => [:rdoc, :copy_docs] do
+  require 'yaml'
+  
+  config = YAML.load(File.read(File.expand_path("~/.rubyforge/user-config.yml")))
+  host = "#{config["username"]}@rubyforge.org"
+  
+  rsync_args = "-v -c -r"
+  remote_dir = "/var/www/gforge-projects/external/rdoc"
+  local_dir = "rdoc"
+ 
+  sh %{rsync #{rsync_args} #{local_dir}/ #{host}:#{remote_dir}}
+end
+
 #
 # Test tasks
 #
@@ -84,7 +102,7 @@ Rake::TestTask.new(:test) do |t|
   t.warning = true
 end
 
-desc 'Run specs.'
+desc 'Run specs (should be run w/wo ARRAY=true).'
 task :spec do
   ARGV.clear
   ARGV.concat Dir.glob("#{File.dirname(__FILE__)}/test/rubyspec/**/#{ENV['pattern'] || '*'}_spec.rb")

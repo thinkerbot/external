@@ -1,7 +1,6 @@
 require File.join(File.dirname(__FILE__), 'external_test_helper.rb') 
 require 'external_index'
 require 'fileutils'
-#require 'ext_arr'
 
 class ExternalIndexTest < Test::Unit::TestCase
   acts_as_subset_test
@@ -13,32 +12,6 @@ class ExternalIndexTest < Test::Unit::TestCase
     @cls = ExternalIndex
     @index = ExternalIndex.new [1,2,3,4,5].pack("I*")
   end
-
-  #
-  #  readme doc test
-  #
-  
-  # def test_readme_doc_for_ext_ind
-  #   ea = ExtArr.new
-  #   assert_equal ExternalIndex, ea._index.class
-  #   index = ea._index
-  #   assert_equal 'I*', index.format
-  #   assert_equal 2, index.frame
-  #   index << [1,2]
-  #   index << [3,4]
-  #   assert_equal [[1,2],[3,4]], index.to_a
-  #   
-  #   Tempfile.open('test_readme_doc_for_ext_ind') do |file|
-  #     file << [1,2,3].pack("IQS")
-  #     file << [4,5,6].pack("IQS")
-  #     file << [7,8,9].pack("IQS")
-  #     file.flush
-  # 
-  #     index = ExternalIndex.new(file, :format => "IQS")
-  #     assert_equal [4,5,6], index[1]
-  #     assert_equal [[1,2,3],[4,5,6],[7,8,9]], index.to_a
-  #   end
-  # end
 
   #
   # setup tests

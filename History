@@ -1,3 +1,10 @@
+== 0.8.0 
+
+Major update with refactoring (ex ExtArr is now ExternalArray) 
+and greatly expanded testing. [] and []= methods all Externals 
+now comply with the Array specification in RubySpec[rubyspec.org].
+Implementation of other methods is under way.
+
 == 0.1.0 / 2007-12-10 revision 23
 
 Initial release with working [] and []= methods
