@@ -894,30 +894,37 @@ class ExternalIndexTest < Test::Unit::TestCase
   end
   
   def test_ASET_doc
-    io = StringIO.new ""
-    i = ExternalIndex.new(io, :format => 'I')
-    assert_equal [0], i.nil_value   
-                   
-    i[4] = [4]                   
-    assert_equal [[0], [0], [0], [0], [4]], i.to_a
+    index = ExternalIndex.new("", :format => 'I')
+    assert_equal [0], index.nil_value
+    index[4] = [4]
+    assert_equal [[0], [0], [0], [0], [4]], index
+    index[0, 3] = [[1], [2], [3]]
+    assert_equal [[1], [2], [3], [0], [4]], index
+    index[1..2] = [[5], [6]]
+    assert_equal [[1], [5], [6], [0], [4]], index
+    index[0, 2] = [[7]]
+    assert_equal [[7], [6], [0], [4]], index
+    index[0..2] = [[8]]
+    assert_equal [[8], [4]], index
+    index[-1]   = [9]
+    assert_equal [[8], [9]], index
+    index[1..-1] = nil
+    assert_equal [[8]], index
+
+    index = ExternalIndex.new("", :format => 'II')
+    assert_equal [0,0], index.nil_value
+  
+    index[0] = [1,2]
+    assert_equal [[1,2]], index
+    index[1] = nil
+    assert_equal [[1,2], [0,0]], index
     
-    i[0, 3] = [ [1], [2], [3] ]  
-    assert_equal [[1], [2], [3], [0], [4]], i.to_a
-
-    i[1..2] = [ [5], [6] ]       
-    assert_equal [[1], [5], [6], [0], [4]], i.to_a
-
-    i[0, 2] = [[7]]               
-    assert_equal [[7], [6], [0], [4]], i.to_a
-
-    i[0..2] = [[8]]                
-    assert_equal [[8], [4]], i.to_a
-
-    i[-1]   = [9]            
-    assert_equal [[8], [9]], i.to_a
-
-    i[1..-1] = nil        
-    assert_equal [[8]], i.to_a
+    index[0,2] = [[1,2],[3,4]]
+    assert_equal [[1,2], [3,4]], index
+    index[1..3] = [[5,6],[7,8]]
+    assert_equal [[1,2], [5,6], [7,8]], index
+    index[0,3] = nil
+    assert_equal [], index
   end
   
   #############################

@@ -342,20 +342,8 @@ class ExternalIndex < External::Base
       
     when Range
       raise TypeError, "can't convert Range into Integer" unless two == nil
-      
-      # total is the length of self
-      total = length
-      
-      # split the range
-      start = convert_to_int(one.begin)
-      start += total if start < 0
-      
-      finish = convert_to_int(one.end)
-      finish += total if finish < 0
-      
-      length = finish - start
-      length -= 1 if one.exclude_end?
-  
+      start, length, total = split_range(one)
+
       # (identical to those above...)
       return nil if start < 0 || start > total
       return []  if length < 0 || start == total
@@ -376,25 +364,58 @@ class ExternalIndex < External::Base
   # self. An IndexError is raised if a negative index points past the beginning of self. 
   # See also push, and unshift.
   #
-  #   io = StringIO.new ""
-  #   i = ExternalIndex.new(io, :format => 'I')
-  #   i.nil_value                  # => [0]
-  #   i[4] = [4]                   # => [[0], [0], [0], [0], [4]]
-  #   i[0, 3] = [ [1], [2], [3] ]  # => [[1], [2], [3], [0], [4]]
-  #   i[1..2] = [ [5], [6] ]       # => [[1], [5], [6], [0], [4]]
-  #   i[0, 2] = [ [7] ]            # => [[7], [6], [0], [4]]
-  #   i[0..2] = [ [8] ]            # => [[8], [4]]
-  #   i[-1]   = [9]                # => [[8], [9]]
-  #   i[1..-1] = nil               # => [[8]]
+  #   index = ExternalIndex.new("", :format => 'I')
+  #   index.nil_value                       # => [0]
+  #   index[4] = [4]; index                 # => [[0], [0], [0], [0], [4]]
+  #   index[0, 3] = [[1], [2], [3]]; index  # => [[1], [2], [3], [0], [4]]
+  #   index[1..2] = [[5], [6]]; index       # => [[1], [5], [6], [0], [4]]
+  #   index[0, 2] = [[7]]; index            # => [[7], [6], [0], [4]]
+  #   index[0..2] = [[8]]; index            # => [[8], [4]]
+  #   index[-1]   = [9]; index              # => [[8], [9]]
+  #   index[1..-1] = nil; index             # => [[8]]
   #
-  # Note that []= can only take entries in frame, or (in the case of [offset, length] and 
-  # range insertions) another ExternalIndex with the same frame, format, and nil_value.
+  # === Differences from Array#[]=
+  #
+  # ExternalIndex#[]= can only take entries in frame.  This means that for individual 
+  # assignments, a framed array must be given; in the case of [start, length] and 
+  # range insertions, an array of framed arrays must be given.  Nils are allowed
+  # in both cases, and are treated the same as in Array (although insertions replace
+  # nil with the nil_value for self).
+  #
+  #   index = ExternalIndex.new("", :format => 'II')
+  #   index.nil_value                       # => [0,0]
+  #
+  #   index[0] = [1,2]; index               # => [[1,2]]
+  #   index[1] = nil; index                 # => [[1,2], [0,0]]
+  #
+  #   index[0,2] = [[1,2],[3,4]]; index     # => [[1,2], [3,4]]
+  #   index[1..3] = [[5,6],[7,8]]; index    # => [[1,2], [5,6], [7,8]]
+  #   index[0,3] = nil; index               # => []
+  #   
+  # Another ExternalIndex with the same frame, format, and nil_value (ie index_attrs)
+  # may be used as an input to [start, length] and range insertions.
+  #
+  # === Performance
+  # Range insertions may require a full copy/rewrite of an ExternalIndex io.  For
+  # very large instances, this obviously can be quite slow; the cases to watch out
+  # for are:
+  #
+  # - insertion of self into self (worst case)
+  # - insertion of values with lengths that do not match the insertion length
+  #
+  # For example:
+  #
+  #   index = ExternalIndex.new("")
+  #   index[0,1] = index
+  #   index[0,3] = [[1], [2]]
+  #   index[0...3] = [[1], [2], [3], [4]]
+  #
   #--
   # TODO -- cleanup error messages so they are more meaningful 
   # and helpful, esp for frame errors
   #++
   def []=(*args)
-    raise ArgumentError, "wrong number of arguments (1 for 2)" if args.length < 2
+    #raise ArgumentError, "wrong number of arguments (1 for 2)" if args.length < 2
     
     one, two, value = args
     if args.length == 2
@@ -474,24 +495,9 @@ class ExternalIndex < External::Base
 
     when Range
       raise TypeError, "can't convert Range into Integer" unless two == nil
-      
-      # total is the length of self
-      total = length
-      
-      # split the range
-      start = convert_to_int(one.begin)
-      raise TypeError, "can't convert #{one.begin.class} into Integer" unless start.kind_of?(Integer)
-      start += total if start < 0
-      
-      finish = convert_to_int(one.end)
-      raise TypeError, "can't convert #{one.end.class} into Integer" unless finish.kind_of?(Integer)
-      finish += total if finish < 0
-      
-      length = finish - start
-      length -= 1 if one.exclude_end?
+      start, length, total = split_range(one)
       
       raise RangeError, "#{one} out of range" if start < 0
-      
       self[start, length < 0 ? 0 : length + 1] = value
 
     when nil
@@ -591,15 +597,6 @@ class ExternalIndex < External::Base
     0.upto(length-1, &block)
     self
   end
-
-  # Returns true if _self_ contains no elements
-  def empty?
-    length == 0
-  end
-
-  def eql?(another)
-    self == another
-  end 
 
   # def fetch(index, default=nil, &block)
   #   index += index_length if index < 0 
@@ -750,11 +747,6 @@ class ExternalIndex < External::Base
   # Converts self to an array, or returns the cache if cached?.
   def to_a
     length == 0 ? [] : read(length, 0)
-  end
-  
-  # Returns self.
-  def to_ary
-    self
   end
 
   # Returns _self_.join.
@@ -956,18 +948,6 @@ class ExternalIndex < External::Base
   end
   
   private
-  
-  # converts obj to an int using the <tt>to_int</tt>
-  # method, if the object responds to <tt>to_int</tt>
-  def convert_to_int(obj)  # :nodoc:
-    obj.respond_to?(:to_int) ? obj.to_int : obj
-  end
-  
-  # converts obj to an array using the <tt>to_ary</tt>
-  # method, if the object responds to <tt>to_ary</tt>
-  def convert_to_ary(obj)  # :nodoc:
-    obj.respond_to?(:to_ary) ? obj.to_ary : obj
-  end
   
   # prepares a write at the specified position by
   # padding to the position and setting pos to

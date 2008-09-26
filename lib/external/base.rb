@@ -107,6 +107,35 @@ module External
       raise NotImplementedError
     end
     
+    ###########################
+    # Array methods
+    ###########################
+    
+    # Returns true if _self_ contains no elements
+    def empty?
+      length == 0
+    end
+    
+    def eql?(another)
+      self == another
+    end
+    
+    # Alias for []
+    def slice(one, two = nil)
+      self[one, two]
+    end
+    
+    # Returns self.
+    #--
+    # Warning -- errors show up when this doesn't return
+    # an Array... however to return an array with to_ary
+    # may mean converting a Base into an Array for
+    # insertions... see/modify convert_to_ary
+    def to_ary
+      self
+    end
+    
+    #
     def inspect
       "#<#{self.class}:#{object_id} #{ellipse_inspect(self)}>"
     end
@@ -119,6 +148,38 @@ module External
       @io = io
     end
     
+    # converts obj to an int using the <tt>to_int</tt>
+    # method, if the object responds to <tt>to_int</tt>
+    def convert_to_int(obj)  # :nodoc:
+      obj.respond_to?(:to_int) ? obj.to_int : obj
+    end
+
+    # converts obj to an array using the <tt>to_ary</tt>
+    # method, if the object responds to <tt>to_ary</tt>
+    def convert_to_ary(obj)  # :nodoc:
+      obj.respond_to?(:to_ary) ? obj.to_ary : obj
+    end
+    
+    # splits the range into a [start, length, total]
+    # array, where total is the length of self.
+    def split_range(range) # :nodoc:
+      total = length
+      
+      # split the range
+      start = convert_to_int(range.begin)
+      raise TypeError, "can't convert #{range.begin.class} into Integer" unless start.kind_of?(Integer)
+      start += total if start < 0
+      
+      finish = convert_to_int(range.end)
+      raise TypeError, "can't convert #{range.end.class} into Integer" unless finish.kind_of?(Integer)
+      finish += total if finish < 0
+      
+      length = finish - start
+      length -= 1 if range.exclude_end?
+      
+      [start, length, total]
+    end
+    
     # helper to inspect large arrays
     def ellipse_inspect(array) # :nodoc:
       if array.length > 10
@@ -128,6 +189,7 @@ module External
       end
     end
     
+    # another helper to inspect large arrays
     def collect_join(array) # :nodoc:
       array.collect do |obj|
         obj.inspect

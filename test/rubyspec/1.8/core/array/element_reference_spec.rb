@@ -52,13 +52,50 @@ describe "ExternalArray.[]" do
     ExternalArray[1, 2, *[3, 4, 5]].should == [1, 2, 3, 4, 5]
   end
 
-  it "when applied to a nested referenced array, unpacks its elements into the containing array" do
-    splatted_array = ExternalArray[3, 4, 5]
-    ExternalArray[1, 2, *splatted_array].should == [1, 2, 3, 4, 5]
-  end
+  # it "when applied to a nested referenced array, unpacks its elements into the containing array" do
+  #   splatted_array = ExternalArray[3, 4, 5]
+  #   ExternalArray[1, 2, *splatted_array].should == [1, 2, 3, 4, 5]
+  # end
   
   it "returns an instance of the subtype when called on an Array subclass" do
     ArraySub = Class.new ExternalArray
+    ArraySub[1,2].class.should == ArraySub
+  end
+end
+
+###############################################################################
+# Duplicated and modified for ExternalIndex
+#
+# changes:
+# - inputs and comparisons are framed
+# - character formats/defaults are set where necessary
+# - the nil values in comparisons are replaced
+#   with the default nil value [0]
+#
+###############################################################################
+describe "ExternalIndex#[]" do
+  it_behaves_like(:external_index_slice, :[])
+end
+
+describe "ExternalIndex.[]" do
+  it "[] should return a new array populated with the given elements" do
+    array = ExternalIndex[1, 2, nil]
+    array[0].should == [1]
+    array[1].should == [2]
+    array[2].should == [0]
+  end
+  
+  it "when applied to a literal nested array, unpacks its elements into the containing array" do
+    ExternalIndex[1, 2, *[3, 4, 5]].should == [[1], [2], [3], [4], [5]]
+  end
+  
+  # it "when applied to a nested referenced array, unpacks its elements into the containing array" do
+  #   splatted_array = ExternalIndex[3, 4, 5]
+  #   ExternalIndex[1, 2, *splatted_array].should == [[1], [2], [3], [4], [5]]
+  # end
+  
+  it "returns an instance of the subtype when called on an Array subclass" do
+    ArraySub = Class.new ExternalIndex
     ArraySub[1,2].class.should == ArraySub
   end
 end
