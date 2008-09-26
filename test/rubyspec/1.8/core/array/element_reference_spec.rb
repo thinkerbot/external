@@ -89,6 +89,7 @@ describe "ExternalIndex.[]" do
     ExternalIndex[1, 2, *[3, 4, 5]].should == [[1], [2], [3], [4], [5]]
   end
   
+  # ::non_compliant
   # it "when applied to a nested referenced array, unpacks its elements into the containing array" do
   #   splatted_array = ExternalIndex[3, 4, 5]
   #   ExternalIndex[1, 2, *splatted_array].should == [[1], [2], [3], [4], [5]]

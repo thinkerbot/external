@@ -1265,7 +1265,7 @@ describe :external_index_slice, :shared => true do
   end
   
   ######################################################
-  # Non-compliant, [] always returns an Array
+  # ::non_compliant [] always returns an Array
   ######################################################
   # class MyExternalIndex < ExternalIndex; end
   # 
@@ -1278,7 +1278,7 @@ describe :external_index_slice, :shared => true do
   
   not_compliant_on :rubinius do
     ######################################################
-    # Non-compliant... raises a TypeError
+    # ::non_compliant raises a TypeError
     ######################################################
     # it "raises a RangeError when the start index is out of range of Fixnum" do
     #   array = ExternalIndex[1, 2, 3, 4, 5, 6]

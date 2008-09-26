@@ -975,8 +975,7 @@ describe "ExternalIndex#[]=" do
     a[5] = ["f"]
     a.should == [["A"], ["z"], ["C"], ["d"], ["E"], ["f"]]
     
-    # note there is a difference in the results here...
-    # the input [] doesn't write anything...
+    # ::deviation the input [] doesn't write anything...
     a[1] = []
     #a.should == [["A"], [], ["C"], ["d"], ["E"], ["f"]]
     a.should == [["A"], ["z"], ["C"], ["d"], ["E"], ["f"]]
@@ -1138,11 +1137,14 @@ describe "ExternalIndex#[]=" do
     ary.should == [[5], [6], [7]]
   end
   
-#   # compliant_on :ruby, :jruby do
-#   #   it "raises a TypeError on a frozen array" do
-#   #     lambda { ArraySpecs.frozen_array[0, 0] = [] }.should raise_error(TypeError)
-#   #   end  
-#   # end
+  compliant_on :ruby, :jruby do
+    # ::deviation no error
+    # it "raises a TypeError on a frozen array" do
+    #   frozen_array = ExternalIndex[1,2,3]
+    #   frozen_array.freeze
+    #   lambda { frozen_array[0, 0] = [] }.should raise_error(TypeError)
+    # end  
+  end
 end
 
 describe "ExternalIndex#[]= with [index]" do
@@ -1178,8 +1180,8 @@ describe "ExternalIndex#[]= with [index]" do
 end
 
 describe "ExternalIndex#[]= with [index, count]" do
+  # ::invalid must receive framed values
   it "returns non-array value if non-array value assigned" do
-    # not a valid test anymore... must receive framed values
     a = ExternalIndex[1, 2, 3, 4, 5]
     (a[2, 3] = [[10]]).should == [[10]]
   end
@@ -1345,6 +1347,8 @@ describe "ExternalIndex#[]= with [index, count]" do
     a.should == [[3], [4], [0]]
     a[0, 100] = [[1], [2], [3]]
     a.should == [[1], [2], [3]]
+    
+    # ::non-compliant
     # a[0, 2] *= 2
     # a.should == [1, 2, 1, 2, 3]
     # a[0, 2] |= [2, 3, 4]
@@ -1360,8 +1364,8 @@ describe "ExternalIndex#[]= with [index, count]" do
 end
 
 describe "ExternalIndex#[]= with [m..n]" do
+  # ::invalid must receive framed values
   it "returns non-array value if non-array value assigned" do
-    # not a valid test anymore... must receive framed values
     a = ExternalIndex[1, 2, 3, 4, 5]
     (a[2..4] = [[10]]).should == [[10]]
   end
@@ -1421,6 +1425,7 @@ describe "ExternalIndex#[]= with [m..n]" do
 end
 
 describe "ExternalIndex#[] after a shift" do
+  # ::non-compliant
   # it "works for insertion" do
   #   a = ExternalArray[1,2]
   #   a.shift
