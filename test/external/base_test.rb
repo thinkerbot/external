@@ -18,18 +18,9 @@ class BaseTest < Test::Unit::TestCase
   # initialize test
   #
   
-  def test_base_initializes_io_to_tempfile_when_nil
+  def test_base_initializes_io_to_StringIO_when_nil
     base = Base.new(nil)
-    
-    condition_test(:ruby_1_8) do
-      assert_equal Tempfile, base.io.class
-    end
-    
-    condition_test(:ruby_1_9) do
-      assert_equal File, base.io.class
-    end
-    
-    assert_equal 0, base.io.path.index(Dir.tmpdir)
+    assert_equal StringIO, base.io.class
   end
   
   def test_base_initializes_io_to_a_strio_when_string

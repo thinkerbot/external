@@ -65,17 +65,19 @@ class ExternalArchive < External::Base
         extarc
       end
     end
+    
+    def default_io_index
+      []
+    end
   end
-  
-  # ExternalArchive.default_io_index = ExternalIndex.new(nil, :format => 'II')
   
   # The underlying index of [position, length] arrays
   # indicating where entries in the io are located.
   attr_reader :io_index
 
-  def initialize(io=nil, io_index=[])
+  def initialize(io=nil, io_index=nil)
     super(io)
-    @io_index = io_index
+    @io_index = io_index || self.class.default_io_index
   end
   
   # Returns true if io_index is an Array.
@@ -121,22 +123,6 @@ class ExternalArchive < External::Base
     self.class.new(nil, cached? ? [] : io_index.another)
   end
 
-  protected
-  
-  # Converts an io_index entry to a position and length; provided as 
-  # a hook to interface with an io_index that does not directly keep 
-  # an array of [position, length] values.
-  def io_entry_to_pos_length(array)
-    array
-  end
-  
-  # Converts a position and length to and io_index entry; provided as 
-  # a hook to interface with an io_index that does not directly keep 
-  # an array of [position, length] values.
-  def pos_length_to_io_entry(pos, length)
-    [pos, length]
-  end
-  
   public
   
   # Converts an string read from io into an entry.  By default
@@ -184,7 +170,7 @@ class ExternalArchive < External::Base
         while advanced = scanner.search_full(pattern, true, false)
           break unless advanced > 0
             
-          index << pos_length_to_io_entry(scan_pos, advanced)
+          index << [scan_pos, advanced]
           scan_pos += advanced 
         end
         
@@ -242,9 +228,9 @@ class ExternalArchive < External::Base
         
           # adjust indicies as needed...
           io_index << case mode
-          when 0 then pos_length_to_io_entry(scan_pos, advanced)
-          when 2 then pos_length_to_io_entry(scan_pos-sep_length, advanced)
-          else pos_length_to_io_entry(scan_pos, advanced-sep_length)
+          when 0 then [scan_pos, advanced]
+          when 2 then [scan_pos-sep_length, advanced]
+          else [scan_pos, advanced-sep_length]
           end
           
           scan_pos += advanced
@@ -260,9 +246,9 @@ class ExternalArchive < External::Base
       # Add the entry here.
       if entry_follows_sep && io.length != 0
         io_index << if exclude_sep
-          pos_length_to_io_entry(io.length - remainder, remainder)
+          [io.length - remainder, remainder]
         else
-          pos_length_to_io_entry(io.length - remainder - sep_length, remainder + sep_length)
+          [io.length - remainder - sep_length, remainder + sep_length]
         end
       end   
     end
@@ -360,101 +346,144 @@ class ExternalArchive < External::Base
     end      
   end
   
+  # Element Reference — Returns the entry at index, or returns an array starting 
+  # at start and continuing for length entries, or returns an array specified 
+  # by range. Negative indices count backward from the end of self (-1 is the last 
+  # element). Returns nil if the index (or starting index) is out of range.
+  #
+  #    a = ExternalArchive[ "a", "b", "c", "d", "e" ]
+  #    a[2] +  a[0] + a[1]    #=> "cab"
+  #    a[6]                   #=> nil
+  #    a[1, 2]                #=> [ "b", "c" ]
+  #    a[1..3]                #=> [ "b", "c", "d" ]
+  #    a[4..7]                #=> [ "e" ]
+  #    a[6..10]               #=> nil
+  #    a[-3, 3]               #=> [ "c", "d", "e" ]
+  #    # special cases
+  #    a[5]                   #=> nil
+  #    a[5, 1]                #=> []
+  #    a[5..10]               #=> []
+  # 
   def [](input, length=nil)
     # two call types are required because while ExternalIndex can take 
     # a nil length, Array cannot and index can be either
-    entries = (length == nil ? io_index[input] : io_index[input, length])
+    entry_indicies = (length == nil ? io_index[input] : io_index[input, length])
     
-    # for conformance with array range retrieval
-    return entries if entries.nil? || entries.empty?
-
-    if length == nil && !input.kind_of?(Range)
-      epos, elen = io_entry_to_pos_length(entries)
+    case
+    when entry_indicies == nil || entry_indicies.empty?
+      # for conformance with array range retrieval,
+      # simply return nil and [] indicies
+      entry_indicies
       
-      # single entry, just read it
-      io.pos = epos
-      str_to_entry( io.read(elen) )
+    when length == nil && !input.kind_of?(Range)
+      # a single entry was specified, read it
+      entry_start, entry_length = entry_indicies
+      io.pos = entry_start
+      str_to_entry( io.read(entry_length) )
+      
     else
+      # multiple entries were specified, collect each
       pos = nil
-      entries.collect do |array|
-        # a nil array may occur with an Array io_index
-        next if array == nil
-        
-        epos, elen = io_entry_to_pos_length(array)
-        
+      entry_indicies.collect do |(entry_start, entry_length)|
+        next if entry_start == nil
+ 
         # only set io position if necessary
-        unless pos == epos
-          pos = epos
+        unless pos == entry_start
+          pos = entry_start
           io.pos = pos
         end
         
-        pos += elen
+        pos += entry_length
         
         # read entry
-        str_to_entry( io.read(elen) )
+        str_to_entry( io.read(entry_length) )
       end 
     end
   end
   
+  # Element Assignment — Sets the entry at index, or replaces a subset starting at start
+  # and continuing for length entries, or replaces a subset specified by range.
+  # A negative indices will count backward from the end of self. Inserts elements if 
+  # length is zero. If nil is used in the second and third form, deletes elements from 
+  # self. An IndexError is raised if a negative index points past the beginning of self. 
+  # See also push, and unshift.
+  #
+  #   a = ExternalArchive.new
+  #   a[4] = "4"; a                  #=> [nil, nil, nil, nil, "4"]
+  #   a[0, 3] = [ 'a', 'b', 'c' ]; a #=> ["a", "b", "c", nil, "4"]
+  #   a[1..2] = [ '1', '2' ]; a      #=> ["a", '1', '2', nil, "4"]
+  #   a[0, 2] = "?"; a               #=> ["?", '2', nil, "4"]
+  #   a[0..2] = "A"; a               #=> ["A", "4"]
+  #   a[-1]   = "Z"; a               #=> ["A", "Z"]
+  #   a[1..-1] = nil; a              #=> ["A"]
+  # 
   def []=(*args)
-    raise ArgumentError.new("wrong number of arguments (1 for 2)") if args.length < 2
-    index, length, value = args
-    value = length if args.length == 2
-  
-    if index.kind_of?(Range)
-      raise TypeError.new("can't convert Range into Integer") if args.length == 3 
-      # for conformance with setting a range with nil (truncates)
-      value = [] if value.nil?
-      offset, length = split_range(index)
-      return (self[offset, length + 1] = value)
-    end
-  
-    index += self.length if index < 0
-    raise IndexError.new("index #{index} out of range") if index  < 0
-  
-    epos = self.io.length
-    io.pos = epos
+    raise ArgumentError, "wrong number of arguments (1 for 2)" if args.length < 2
     
+    one, two, value = args
     if args.length == 2
+      value = two 
+      two = nil
+    end
 
-      #value = self.to_a if value.kind_of?(ExternalIndex)
+    one = convert_to_int(one)
+    case one
+    when Fixnum
+      if one < 0
+        one += length
+        raise IndexError, "index #{one} out of range" if one  < 0
+      end
       
-      # write entry to io first as a check
-      # that io is open for writing.
-      elen = io.write( entry_to_str(value) )
-      io.length += elen
+      entry_start = io.length
+      io.pos = entry_start
+      
+      if two == nil
+        # simple insertion 
+        # (note it is important to write the entry to io 
+        # first as a check that io is open for writing)
 
-      self.io_index[index] = pos_length_to_io_entry(epos, elen) # value
-  
-    else
-      indicies = []
-      
-      values = case value
-      when Array then value
-      when ExternalArchive
-        if value.object_id == self.object_id
+        entry_length = io.write( entry_to_str(value) )
+        io.length += entry_length
+        io_index[one] = [entry_start, entry_length]
+        
+      else
+        values = case value
+        when Array then value
+        when ExternalArchive
           # special case, self will be reading and
           # writing from the same io, producing 
           # incorrect results
           
           # potential to load a huge amount of data
-          self.to_a
-        else
-          value
+          value == self ? value.to_a : value
+        else convert_to_ary(value)
         end
-      else 
-        [value]
+        
+        # write each value to self, collecting the indicies
+        indicies = []
+        values.each do |value|
+          entry_length = io.write( entry_to_str(value) )
+          indicies << [entry_start, entry_length]
+          
+          io.length += entry_length
+          entry_start += entry_length
+        end
+        
+        # register the indicies
+        io_index[one, two] = indicies
       end
 
-      values.each do |value|
-        elen = io.write( entry_to_str(value) )
-        indicies << pos_length_to_io_entry(epos, elen) # value
-        
-        io.length += elen
-        epos += elen
-      end
+    when Range
+      raise TypeError, "can't convert Range into Integer" unless two == nil
+      start, length, total = split_range(one)
       
-      self.io_index[index, length] = indicies
+      raise RangeError, "#{one} out of range" if start < 0
+      self[start, length < 0 ? 0 : length + 1] = value
+
+    when nil
+      raise TypeError, "no implicit conversion from nil to integer"
+    else
+      raise TypeError, "can't convert #{one.class} into Integer"
     end
   end
 
@@ -522,20 +551,23 @@ class ExternalArchive < External::Base
     # tracking the position using a local variable 
     # is faster than calling io.pos.  
     pos = nil
-    io_index.each do |array|
-      epos, elen = io_entry_to_pos_length(array)
+    io_index.each do |(start, length)|
+      if start == nil
+        yield("")
+        next  
+      end
       
       # only set io position if necessary
-      unless pos == epos
-        pos = epos
+      unless pos == start
+        pos = start
         io.pos = pos
       end
       
       # advance position
-      pos += elen
+      pos += length
       
       # yield entry string
-      yield io.read(elen)
+      yield io.read(length)
     end
     self
   end
@@ -553,15 +585,6 @@ class ExternalArchive < External::Base
     0.upto(length-1, &block)
     self
   end
-
-  # Returns true if _self_ contains no elements
-  def empty?
-    length == 0
-  end
-  
-  def eql?(another)
-    self == another
-  end 
   
   # def fetch(index, default=nil, &block)
   #   index += index_length if index < 0 
@@ -572,11 +595,6 @@ class ExternalArchive < External::Base
   # def fill(*args)
   #   not_implemented
   # end
-  
-  # Returns the first n entries (default 1)
-  def first(n=nil)
-    n.nil? ? self[0] : self[0,n]
-  end
   
   # def flatten
   #   not_implemented
@@ -641,18 +659,16 @@ class ExternalArchive < External::Base
   end
   
   # Returns the number of non-nil elements in self. May be zero.
-  def nitems
-    count = self.length
-    io_index.each do |array|
-      epos, elen = io_entry_to_pos_length(array)
-      
-      # the logic of this search is that nil,
-      # (and only nil ?) can have an entry 
-      # length of 5:  nil.to_yaml == "--- \n"
-      count -= 1 if elen == 5
-    end
-    count
-  end
+  # def nitems
+  #   count = self.length
+  #   io_index.each do |(start, length)|
+  #     # the logic of this search is that nil,
+  #     # (and only nil ?) can have an entry 
+  #     # length of 5:  nil.to_yaml == "--- \n"
+  #     count -= 1 if length == nil || length == 5
+  #   end
+  #   count
+  # end
   
   # def pack(aTemplateString)
   #   not_implemented
@@ -696,16 +712,16 @@ class ExternalArchive < External::Base
   # end
   
   def reverse_each_str(&block) # :yield: string
-    io_index.reverse_each do |array|
-      epos, elen = io_entry_to_pos_length(array)
-      
+    io_index.reverse_each do |(start,length)|
+      next if start == nil
+
       # A more optimized approach would
       # read in a chunk of entries and
       # iterate over them?
-      io.pos = epos
+      io.pos = start
       
       # yield entry string
-      yield io.read(elen)
+      yield io.read(length)
     end
     self
   end

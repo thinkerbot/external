@@ -52,8 +52,8 @@ module External
     # a Tempfile initialized to TEMPFILE_BASENAME is used.
     def initialize(io=nil)
       self.io = case io
-      when nil then Tempfile.new(TEMPFILE_BASENAME)
-      when String then StringIO.new(io)
+      when nil, String 
+        StringIO.new(io.to_s)
       else io
       end
       
@@ -101,6 +101,14 @@ module External
       self
     end
     
+    #
+    #--
+    # VERY slow
+    def dup
+      flush
+      another.concat(self)
+    end
+    
     # Returns another instance of self.  Must be
     # implemented in a subclass.
     def another
@@ -118,6 +126,11 @@ module External
     
     def eql?(another)
       self == another
+    end
+    
+    # Returns the first n entries (default 1)
+    def first(n=nil)
+      n.nil? ? self[0] : self[0,n]
     end
     
     # Alias for []
@@ -157,7 +170,7 @@ module External
     # converts obj to an array using the <tt>to_ary</tt>
     # method, if the object responds to <tt>to_ary</tt>
     def convert_to_ary(obj)  # :nodoc:
-      obj.respond_to?(:to_ary) ? obj.to_ary : obj
+      obj == nil ? [] : obj.respond_to?(:to_ary) ? obj.to_ary : [obj]
     end
     
     # splits the range into a [start, length, total]

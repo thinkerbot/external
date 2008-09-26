@@ -46,7 +46,7 @@ class ExternalArray < ExternalArchive
   end
   
   def str_to_entry(str)
-    str == nil ? nil : YAML.load(str)
+    str == nil || str.empty? ? nil : YAML.load(str)
   end
   
   def entry_to_str(entry)

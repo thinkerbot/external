@@ -812,13 +812,18 @@ describe :array_slice, :shared => true do
     a.send(@method, 10..10).should == nil
     a.should == [1, 2]
   end
-
-  it "returns a subclass instance when called on a subclass of Array" do
-    ary = ArraySpecs::MyArray[1, 2, 3]
-    ary.send(@method, 0, 0).class.should == ArraySpecs::MyArray
-    ary.send(@method, 0, 2).class.should == ArraySpecs::MyArray
-    ary.send(@method, 0..10).class.should == ArraySpecs::MyArray
-  end
+  
+  ##################################################
+  # ::non-compliant [] always returns Array
+  ##################################################
+  # class MyExternalArray < ExternalArray; end
+  # 
+  # it "returns a subclass instance when called on a subclass of Array" do
+  #   ary = MyExternalArray[1, 2, 3]
+  #   ary.send(@method, 0, 0).class.should == MyExternalArray
+  #   ary.send(@method, 0, 2).class.should == MyExternalArray
+  #   ary.send(@method, 0..10).class.should == MyExternalArray
+  # end
 
   not_compliant_on :rubinius do
     it "raises a RangeError when the start index is out of range of Fixnum" do
@@ -848,17 +853,17 @@ describe :array_slice, :shared => true do
       obj = mock('large value')
       obj.should_receive(:to_int).and_return(0x8000_0000_0000_0000_0000)
       lambda { array.send(@method, obj) }.should raise_error(TypeError)
-
+  
       obj = 8e19
       lambda { array.send(@method, obj) }.should raise_error(TypeError)
     end
-
+  
     it "raises a TypeError when the length is out of range of Fixnum" do
       array = ExternalArray[1, 2, 3, 4, 5, 6]
       obj = mock('large value')
       obj.should_receive(:to_int).and_return(0x8000_0000_0000_0000_0000)
       lambda { array.send(@method, 1, obj) }.should raise_error(TypeError)
-
+  
       obj = 8e19
       lambda { array.send(@method, 1, obj) }.should raise_error(TypeError)
     end
@@ -1277,18 +1282,15 @@ describe :external_index_slice, :shared => true do
   # end
   
   not_compliant_on :rubinius do
-    ######################################################
-    # ::non_compliant raises a TypeError
-    ######################################################
-    # it "raises a RangeError when the start index is out of range of Fixnum" do
-    #   array = ExternalIndex[1, 2, 3, 4, 5, 6]
-    #   obj = mock('large value')
-    #   obj.should_receive(:to_int).and_return(0x8000_0000_0000_0000_0000)
-    #   lambda { array.send(@method, obj) }.should raise_error(RangeError)
-    #   
-    #   obj = 8e19
-    #   lambda { array.send(@method, obj) }.should raise_error(RangeError)
-    # end
+    it "raises a RangeError when the start index is out of range of Fixnum" do
+      array = ExternalIndex[1, 2, 3, 4, 5, 6]
+      obj = mock('large value')
+      obj.should_receive(:to_int).and_return(0x8000_0000_0000_0000_0000)
+      lambda { array.send(@method, obj) }.should raise_error(RangeError)
+      
+      obj = 8e19
+      lambda { array.send(@method, obj) }.should raise_error(RangeError)
+    end
   
     it "raises a RangeError when the length is out of range of Fixnum" do
       array = ExternalIndex[1, 2, 3, 4, 5, 6]
@@ -1301,25 +1303,25 @@ describe :external_index_slice, :shared => true do
     end
   end
   
-  # deviates_on :rubinius do
-  #   it "raises a TypeError when the start index is out of range of Fixnum" do
-  #     array = [1, 2, 3, 4, 5, 6]
-  #     obj = mock('large value')
-  #     obj.should_receive(:to_int).and_return(0x8000_0000_0000_0000_0000)
-  #     lambda { array.send(@method, obj) }.should raise_error(TypeError)
-  # 
-  #     obj = 8e19
-  #     lambda { array.send(@method, obj) }.should raise_error(TypeError)
-  #   end
-  # 
-  #   it "raises a TypeError when the length is out of range of Fixnum" do
-  #     array = [1, 2, 3, 4, 5, 6]
-  #     obj = mock('large value')
-  #     obj.should_receive(:to_int).and_return(0x8000_0000_0000_0000_0000)
-  #     lambda { array.send(@method, 1, obj) }.should raise_error(TypeError)
-  # 
-  #     obj = 8e19
-  #     lambda { array.send(@method, 1, obj) }.should raise_error(TypeError)
-  #   end
-  # end
+  deviates_on :rubinius do
+    it "raises a TypeError when the start index is out of range of Fixnum" do
+      array = ExternalIndex[1, 2, 3, 4, 5, 6]
+      obj = mock('large value')
+      obj.should_receive(:to_int).and_return(0x8000_0000_0000_0000_0000)
+      lambda { array.send(@method, obj) }.should raise_error(TypeError)
+  
+      obj = 8e19
+      lambda { array.send(@method, obj) }.should raise_error(TypeError)
+    end
+  
+    it "raises a TypeError when the length is out of range of Fixnum" do
+      array = ExternalIndex[1, 2, 3, 4, 5, 6]
+      obj = mock('large value')
+      obj.should_receive(:to_int).and_return(0x8000_0000_0000_0000_0000)
+      lambda { array.send(@method, 1, obj) }.should raise_error(TypeError)
+  
+      obj = 8e19
+      lambda { array.send(@method, 1, obj) }.should raise_error(TypeError)
+    end
+  end
 end

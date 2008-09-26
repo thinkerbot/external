@@ -239,11 +239,6 @@ class ExternalIndex < External::Base
   # def *(arg)
   #   not_implemented
   # end
-  
-  def dup
-    self.flush
-    another.concat(self)
-  end
 
   def +(another)
     dup.concat(another)
@@ -352,6 +347,9 @@ class ExternalIndex < External::Base
       
     when nil
       raise TypeError, "no implicit conversion from nil to integer"
+    when Bignum
+      # special case, RangeError not TypeError is raised by Array
+      raise RangeError, "can't convert #{one.class} into Integer"
     else
       raise TypeError, "can't convert #{one.class} into Integer"
     end
@@ -415,7 +413,7 @@ class ExternalIndex < External::Base
   # and helpful, esp for frame errors
   #++
   def []=(*args)
-    #raise ArgumentError, "wrong number of arguments (1 for 2)" if args.length < 2
+    raise ArgumentError, "wrong number of arguments (1 for 2)" if args.length < 2
     
     one, two, value = args
     if args.length == 2
@@ -438,9 +436,7 @@ class ExternalIndex < External::Base
         two = convert_to_int(two)
         raise IndexError, "negative length (#{two})" if two < 0
         
-        value = [] if value == nil
         value = convert_to_ary(value)
-        
         case
         when self == value
           # special case when insertion is self (no validation needed)

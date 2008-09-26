@@ -88,7 +88,7 @@ class ExternalArrayTest < Test::Unit::TestCase
   def test_initialize
     ea = ExternalArray.new
       
-    assert_equal Tempfile, ea.io.class
+    assert_equal StringIO, ea.io.class
     assert_equal "", ea.io.read
     assert_equal [], ea.io_index.to_a
   end
@@ -230,6 +230,43 @@ class ExternalArrayTest < Test::Unit::TestCase
     end
   end
 
+  #############################
+  # Documentation tests
+  #############################
+
+  def test_AGET_documentation
+    a = ExternalArray[ "a", "b", "c", "d", "e" ]
+    assert_equal "cab", a[2] +  a[0] + a[1]
+    assert_equal nil, a[6]
+    assert_equal [ "b", "c" ], a[1, 2]
+    assert_equal [ "b", "c", "d" ], a[1..3]
+    assert_equal [ "e" ], a[4..7]
+    assert_equal nil, a[6..10]
+    assert_equal [ "c", "d", "e" ], a[-3, 3]
+    # special cases
+    assert_equal nil, a[5]
+    assert_equal [], a[5, 1]
+    assert_equal [], a[5..10]
+  end
+  
+  def test_ASET_documentation
+    a = ExternalArray.new
+    a[4] = "4"
+    assert_equal [nil, nil, nil, nil, "4"], a
+    a[0, 3] = [ 'a', 'b', 'c' ]
+    assert_equal ["a", "b", "c", nil, "4"], a
+    a[1..2] = [ 1, 2 ]
+    assert_equal ["a", 1, 2, nil, "4"], a
+    a[0, 2] = "?"
+    assert_equal ["?", 2, nil, "4"], a
+    a[0..2] = "A"
+    assert_equal ["A", "4"], a
+    a[-1]   = "Z"
+    assert_equal ["A", "Z"], a
+    a[1..-1] = nil
+    assert_equal ["A"], a
+  end
+  
   #############################
   # Modified Array methods tests
   #############################
