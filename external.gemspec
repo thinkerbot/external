@@ -1,13 +1,13 @@
 Gem::Specification.new do |s|
   s.name = "external"
-	s.version = "0.1.7"
+	s.version = "0.8.0"
 	s.author = "Simon Chiang"
 	s.email = "simon.a.chiang@gmail.com"
 	s.homepage = "http://rubyforge.org/projects/external/"
   s.platform = Gem::Platform::RUBY
   s.summary = "array-like access to external data files"
   s.require_path = "lib"
-  s.test_file = "test/tap_test_suite.rb"
+  #s.test_file = "test/tap_test_suite.rb"
   s.rubyforge_project = "external"
   s.has_rdoc = true
   s.add_development_dependency("tap", "~> 0.10.7")
@@ -21,7 +21,17 @@ Gem::Specification.new do |s|
   # list the files you want to include here. you can
   # check this manifest using 'rake :print_manifest'
   s.files = %W{
-    test/tap_test_helper.rb
-    test/tap_test_suite.rb
+    lib/external.rb
+    lib/external/base.rb
+    lib/external/chunkable.rb
+    lib/external/enumerable.rb
+    lib/external/io.rb
+    lib/external/patches/ruby_1_8_io.rb
+    lib/external/patches/windows_io.rb
+    lib/external/patches/windows_utils.rb
+    lib/external/utils.rb
+    lib/external_archive.rb
+    lib/external_array.rb
+    lib/external_index.rb
   }
 end
