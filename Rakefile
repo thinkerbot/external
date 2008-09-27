@@ -83,7 +83,7 @@ task :publish_rdoc => [:rdoc, :copy_docs] do
   host = "#{config["username"]}@rubyforge.org"
   
   rsync_args = "-v -c -r"
-  remote_dir = "/var/www/gforge-projects/external/rdoc"
+  remote_dir = "/var/www/gforge-projects/external"
   local_dir = "rdoc"
  
   sh %{rsync #{rsync_args} #{local_dir}/ #{host}:#{remote_dir}}
