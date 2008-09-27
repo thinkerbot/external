@@ -44,9 +44,18 @@ $:.unshift lib_dir unless $:.include?(lib_dir)
 require 'external'
 
 # set the default_io_index to run with an ExternalIndex
-class << ExternalArchive
-  def default_io_index
-    ENV['ARRAY'] || ENV['array'] ? [] : ExternalIndex.new('', :format => "II")
+class ExternalArray
+  
+  if ENV['ARRAY'] || ENV['array']
+    def initialize(io=nil, io_index=nil)
+      io_index = [] if io_index == nil
+      super(io, io_index)
+    end
+  else
+    def initialize(io=nil, io_index=nil)
+      io_index = ExternalIndex.new('', :format => "II") if io_index == nil
+      super(io, io_index)
+    end
   end
 end
 

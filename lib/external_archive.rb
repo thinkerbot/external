@@ -37,7 +37,7 @@ class ExternalArchive < External::Base
       extarc
     end
     
-    # Returns the default index filepath for path:
+    # Returns the default io index filepath for path:
     #
     #   ExternalArchive.index_path("/path/to/file.txt")   # => "/path/to/file.index"
     #
@@ -45,16 +45,47 @@ class ExternalArchive < External::Base
       path ? path.chomp(File.extname(path)) + '.index' : nil
     end
     
-    def open(fd=nil, mode="rb", options={})
-      index_fd = index_path(options[:index] || fd)
-      index_fd = File.exists?(index_fd) ? index_fd : nil
+    # Initializes an instance of self with File.open(path, mode) as an io.
+    # As with File.open, the instance will be passed to the block and
+    # closed when the block returns.  If no block is given, open returns
+    # the new instance.
+    #
+    # By default the instance will be initialized with an ExternalIndex 
+    # io_index, linked to index_path(path). The instance will be 
+    # automatically reindexed if it is empty but it's io is not.
+    #
+    # Options (specify using symbols):
+    # io_index:: Specifies the io_index manually.  A filepath may be
+    #            provided and it will be used instead of index_path(path).
+    #            Array and ExternalIndex values are used directly.
+    # reindex:: Forces a call to reindex; using auto reindexing, reindex
+    #           is normally only called when the instance is empty
+    #           and the instance io is not. (default false)
+    # auto_reindex:: Turns on or off auto reindexing (default true)
+    #
+    def open(path, mode="rb", options={})
+      options = {
+        :io_index => nil,
+        :reindex => false,
+        :auto_reindex => true
+      }.merge(options)
       
-      extarc = self.new(
-        fd == nil ? nil : File.open(fd, mode),
-        ExternalIndex.open(index_fd, mode, options.merge(:format => 'II')))
+      index = options[:io_index]
+      if index == nil
+        index = index_path(path)
+        FileUtils.touch(index) unless File.exists?(index)
+      end
+      
+      io_index = case index
+      when Array, ExternalIndex then index
+      else ExternalIndex.open(index, 'r+', :format => 'II')
+      end
+      
+      io = path == nil ? nil : File.open(path, mode)
+      extarc = new(io, io_index)
       
       # reindex if necessary
-      if extarc.empty? && extarc.io.length > 0
+      if options[:reindex] || (options[:auto_reindex] && extarc.empty? && extarc.io.length > 0)
         extarc.reindex
       end
       
@@ -68,10 +99,6 @@ class ExternalArchive < External::Base
         extarc
       end
     end
-    
-    def default_io_index
-      []
-    end
   end
   
   # The underlying index of [position, length] arrays
@@ -80,7 +107,7 @@ class ExternalArchive < External::Base
 
   def initialize(io=nil, io_index=nil)
     super(io)
-    @io_index = io_index || self.class.default_io_index
+    @io_index = io_index || []
   end
   
   # Returns true if io_index is an Array.
@@ -147,7 +174,7 @@ class ExternalArchive < External::Base
     io_index.clear
     io.flush
     io.rewind
-    yield(io, io_index)
+    yield(io, io_index) if block_given?
     self
   end
   
@@ -526,7 +553,7 @@ class ExternalArchive < External::Base
   def concat(another)
     case another
     when Array, ExternalArchive
-      another.each {|item| self[length] = item }
+      self[length, another.length] = another
     else 
       raise TypeError.new("can't convert #{another.class} into ExternalArchive or Array")
     end

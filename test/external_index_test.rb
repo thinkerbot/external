@@ -342,10 +342,6 @@ class ExternalIndexTest < Test::Unit::TestCase
     assert_equal 40, b.buffer_size
   end
 
-  ########################
-  # ...
-  ########################
-  
   #
   # length test
   #
@@ -360,10 +356,6 @@ class ExternalIndexTest < Test::Unit::TestCase
     index.io.length = 0
     assert_equal 0, index.length
   end
-  
-  ########################
-  # ...
-  ########################
   
   #
   # pos test
@@ -848,9 +840,9 @@ class ExternalIndexTest < Test::Unit::TestCase
     end
   end
   
-  #############################
+  ##########################################################
   # Array method documentation
-  #############################
+  ##########################################################
   
   def test_AREF_doc
     index = ExternalIndex[1,2,3,4,5]
@@ -900,9 +892,12 @@ class ExternalIndexTest < Test::Unit::TestCase
     assert_equal [], index
   end
   
-  #############################
+  ##########################################################
   # Modified Array methods tests
-  #############################
+  #
+  # taken from Ruby 1.9 trunk, revision 13450 (2007-16-2007)
+  # test/ruby/test_array.rb
+  ##########################################################
 
   def test_empty_0
     # Changes: had to rewrite arrays as @cls
@@ -1325,7 +1320,7 @@ class ExternalIndexTest < Test::Unit::TestCase
   end
 
   def test_at
-    # Chagnes: values must be in frame
+    # Changes: values must be in frame
     
     a = @cls[*(0..99).to_a]
     # assert_equal(0,   a.at(0))

@@ -15,7 +15,7 @@ module External
   class Base
     class << self
       
-      # Initializes an instance of self with File.open(fd, mode) as an io.
+      # Initializes an instance of self with File.open(path, mode) as an io.
       # As with File.open, the instance will be passed to the block and
       # closed when the block returns.  If no block is given, open returns
       # the new instance.  
@@ -23,9 +23,9 @@ module External
       # Nil may be provided as an fd, in which case a Tempfile will be
       # used (in which case mode gets ignored as Tempfiles always open
       # in 'r+' mode).
-      def open(fd=nil, mode="rb", *argv)
-        fd = File.open(fd, mode) unless fd == nil
-        base = self.new(fd, *argv)
+      def open(path=nil, mode="rb", *argv)
+        path = File.open(path, mode) unless path == nil
+        base = new(path, *argv)
         
         if block_given?
           begin

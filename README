@@ -50,7 +50,11 @@ Chains of newlines ("\n"):
 
   YAML.load(YAML.dump("\n"))          # => ""
   YAML.load(YAML.dump("\n\n"))        # => ""
+  
+DateTime is loaded as Time:
 
+  YAML.load(YAML.dump(DateTime.now)).class         # => Time
+  
 == Usage
 
 === ExternalArray
@@ -82,13 +86,12 @@ is moved to the path and a binary index file will be created:
   index.unpack('I*')                  # => [0, 8, 8, 16, 24, 13]
 
 ExternalArray provides <tt>open</tt> to create ExternalArrays from an existing 
-file; the instance will use an index file if it exists, or automatically reindex
-the data if it does not.  Manual calls to reindex may be necessary when you
-initialize an ExternalArray with <tt>new</tt> instead of <tt>open</tt>:
+file; the instance will use an index file if it exists and automatically
+reindex the data if it does not.  Manual calls to reindex may be necessary when
+you initialize an ExternalArray with <tt>new</tt> instead of <tt>open</tt>:
 
   # use of an existing index file
   ExternalArray.open('example.yml') do |b|
-    b.io_index.io.class               # => File
     File.basename(b.io_index.io.path) # => 'example.index'
     b.to_a                            # => ['str', {'key' => 'value'}, [1,2]]
   end
@@ -96,7 +99,6 @@ initialize an ExternalArray with <tt>new</tt> instead of <tt>open</tt>:
   # automatic reindexing
   FileUtils.rm('example.index')
   ExternalArray.open('example.yml') do |b|
-    b.io_index.io.class               # => Tempfile
     b.to_a                            # => ['str', {'key' => 'value'}, [1,2]]
   end
   

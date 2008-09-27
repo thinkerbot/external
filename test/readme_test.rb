@@ -19,6 +19,8 @@ class ReadmeTest < Test::Unit::TestCase
 
     assert_equal "", YAML.load(YAML.dump("\n"))
     assert_equal "",YAML.load(YAML.dump("\n\n"))
+    
+    assert_equal Time, YAML.load(YAML.dump(DateTime.now)).class
   end
   
   #
@@ -48,15 +50,12 @@ class ReadmeTest < Test::Unit::TestCase
     assert_equal [0, 8, 8, 16, 24, 13], File.read(index).unpack('I*')
 
     ExternalArray.open(example) do |b|
-      assert_equal File, b.io_index.io.class
       assert_equal File.basename(index), File.basename(b.io_index.io.path)
       assert_equal ['str', {'key' => 'value'}, [1,2]], b.to_a
     end
 
     FileUtils.rm(index)
     ExternalArray.open(example) do |b|
-      condition_test(:ruby_1_8) { assert_equal Tempfile, b.io_index.io.class }
-      condition_test(:ruby_1_9) { assert_equal File, b.io_index.io.class }
       assert_equal ['str', {'key' => 'value'}, [1,2]], b.to_a
     end
     

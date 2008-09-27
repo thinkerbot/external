@@ -5,48 +5,10 @@ require 'fileutils'
 class ExternalArrayTest < Test::Unit::TestCase
   acts_as_file_test
 
-  attr_reader :ea, :tempfile
-
   def setup
     super
     # cls represents an array
     @cls = ExternalArray
-    
-    @tempfile = Tempfile.new("eatest")
-    @tempfile << string
-    @tempfile.pos = 0
-
-    @ea = ExternalArray.new(@tempfile)
-    @ea.io_index.concat(index)
-  end
-  
-  def teardown
-    @tempfile.close unless @tempfile.closed?
-    super
-  end
-  
-  def string
-    "abcdefgh"
-  end
-  
-  def array
-    ["abc", "de", "fgh"]
-  end
-  
-  def index
-    [[0,3],[3,2],[5,3]]
-  end
-  
-  #
-  # test setup
-  #
-  
-  def test_setup
-    assert_equal ExternalArray, @cls
-    
-    assert_equal string, tempfile.read
-    assert_equal tempfile.path, ea.io.path
-    assert_equal index, ea.io_index.to_a
   end
   
   #
@@ -58,41 +20,6 @@ class ExternalArrayTest < Test::Unit::TestCase
     assert_equal "", ea.io.read
     assert_equal [], ea.io_index.to_a
   end
-  
-  def test_initialize_with_existing_file_and_index
-    ExternalArray.open(ctr.filepath("input.txt")) do |ea|
-      assert_equal 'input.txt', File.basename(ea.io.path)
-      assert_equal string, ea.io.read
-      assert_equal index, ea.io_index.to_a
-    end
-  end
-  
-  def test_initialize_load_specified_index_file
-    alt_index = ctr.filepath('input.index')
-    assert File.exists?(alt_index)
-    
-    ExternalArray.open(ctr.filepath('without_index.txt'), 'r', :index => alt_index) do |ea|
-      assert_equal File.read(alt_index).unpack("I*"), ea.io_index.to_a.flatten
-    end
-  end
-  
-  # def test_initialize_with_existing_file_and_non_existant_index_file_creates_index_file_in_cached_mode
-  #   File.open(ctr.filepath('without_index.txt')) do |file|
-  #     index_file = ctr.filepath('without_index.index')
-  #     begin
-  #       assert !File.exists?(index_file)
-  #       ea = ExternalArray.new(file, :index => index_file)
-  #     
-  #       assert_equal ExternalIndex, ea.io_index.class
-  #       assert File.exists?(ea.io_index.io.path)
-  #       assert ea.io_index.cached?
-  #     
-  #       ea.close
-  #     ensure
-  #       FileUtils.rm(index_file) if File.exists?(index_file)
-  #     end  
-  #   end
-  # end
   
   #
   # test reindex
@@ -136,64 +63,66 @@ class ExternalArrayTest < Test::Unit::TestCase
     #reindex_test ["\n", "\r\n", "", "--- \n"]
   end
   
-  
-  # def test_length_speed
-  #   arr = [[1,2,3].to_yaml]
-  #   str = arr.to_yaml * 100000
-  #   
-  #   io = StringIO.new(str)
-  #   
-  #   bm do |x|
-  #     x.report("10k") do
-  #       YAML.parse_documents(io) do |doc|
-  #         doc
-  #       end
-  #     end
-  #     
-  #     io.rewind
-  #     x.report("10k length") do
-  #       YAML.parse_documents(io) do |doc|
-  #         doc.length 
-  #       end
-  #     end
-  #   end
-  # end
-  
   #
   # entry_to_str, str_to_entry test
   #
 
-  def test_entry_to_str_and_str_to_entry_are_inverse_functions_for_objects_responding_to_to_yaml
-    [
-      nil, true, false,
-      :a, :symbol,
-      '', 'a', "abcde fghij", "1234", "with\nnewline", " \r \n \t  ", " ", "\t", [1,2,3].to_yaml, 
-      0, 1, -1, 1.1, 18446744073709551615,
+  def test_entry_to_str_and_str_to_entry_are_inverse_functions
+    extarr = ExternalArray.new '', ''
+    
+    [ nil, true, false,
+      :symbol,
+      '', 'a', "abcde fghij", "1234", "with\nnewline", " \r \n \t  ", " ", "\t", 
+      0, 1, -1, 18446744073709551615,
+      1.1, -1.1,
       [], [1,2,3], 
       {}, {:key => 'value', 'another' => 1}, 
-      Time.now
+      Time.now,
+      
+      # yaml and nested yaml
+      {:key => 'value', 'another' => 1}.to_yaml, 
+      [1,2,3].to_yaml, 
+      {{:key => 'value', 'another' => 1}.to_yaml => [1,2,3].to_yaml}.to_yaml
     ].each do |obj|
-      str = ea.entry_to_str(obj)
-      assert_equal obj, ea.str_to_entry(str)
+      str = extarr.entry_to_str(obj)
+      assert_equal obj, extarr.str_to_entry(str)
+    end
+  
+    # FLUNK cases
+    [ "\r", 
+      "\r\n", 
+      "string with \r\n internal",
+      "\n", "\n\n\n"
+    ].each do |obj|
+      str = extarr.entry_to_str(obj)
+      assert_not_equal obj, extarr.str_to_entry(str)
     end
     
-    # FLUNK CASES! 
-    ["\r", "\n", "\r\n", "string_with_\r\n_internal"].each do |obj|
-      str = ea.entry_to_str(obj)
-      assert_not_equal obj, ea.str_to_entry(str)
+    # ERROR cases
+    [ lambda {},
+      Object # a class
+    ].each do |obj|
+      assert_raise(TypeError) do
+        str = extarr.entry_to_str(obj)
+        extarr.str_to_entry(str)
+      end
     end
   end
   
-  def test_strings_and_numerics_can_be_converted_from_their_to_s
-    ['a', "abcde fghij"].each  do |obj|
-      assert obj.kind_of?(String)
-      assert_equal obj, ea.str_to_entry(obj.to_s)
-    end
+  def test_datetimes_are_loaded_as_Times
+    extarr = ExternalArray.new '', ''
     
-    [1, -1, 1.1, 18446744073709551615].each  do |obj|
-      assert obj.kind_of?(Numeric)
-      assert_equal obj, ea.str_to_entry(obj.to_s)
-    end
+    now = DateTime.now
+    dumped_entry = extarr.entry_to_str(now)
+    loaded_entry = extarr.str_to_entry(dumped_entry)
+    
+    assert_equal Time, loaded_entry.class
+    assert_equal now.year, loaded_entry.year
+    assert_equal now.month, loaded_entry.month
+    assert_equal now.day, loaded_entry.day
+    assert_equal now.hour, loaded_entry.hour
+    assert_equal now.min, loaded_entry.min
+    assert_equal now.sec, loaded_entry.sec
   end
 
   #############################
@@ -233,9 +162,12 @@ class ExternalArrayTest < Test::Unit::TestCase
     assert_equal ["A"], a
   end
   
-  #############################
+  ##########################################################
   # Modified Array methods tests
-  #############################
+  #
+  # taken from Ruby 1.9 trunk, revision 13450 (2007-16-2007)
+  # test/ruby/test_array.rb
+  ##########################################################
 
   def test_empty_0
     # Changes: had to rewrite arrays as @cls
@@ -369,13 +301,11 @@ class ExternalArrayTest < Test::Unit::TestCase
 
     a = @cls[1, 2, 3]
     a[1, 0] = a
-    #assert_equal([1, 1, 2, 3, 2, 3], a)
-    assert_equal(@cls[1, 1, 2, 3, 2, 3], a)
+    assert_equal([1, 1, 2, 3, 2, 3], a)
 
     a = @cls[1, 2, 3]
     a[-1, 0] = a
-    #assert_equal([1, 2, 1, 2, 3, 3], a)
-    assert_equal(@cls[1, 2, 1, 2, 3, 3], a)
+    assert_equal([1, 2, 1, 2, 3, 3], a)
   end
   
   def test_collect
@@ -398,17 +328,15 @@ class ExternalArrayTest < Test::Unit::TestCase
   end
   
   def test_concat
-    # Currently there are issues with this...
+    assert_equal(@cls[1, 2, 3, 4],     @cls[1, 2].concat(@cls[3, 4]))
+    assert_equal(@cls[1, 2, 3, 4],     @cls[].concat(@cls[1, 2, 3, 4]))
+    assert_equal(@cls[1, 2, 3, 4],     @cls[1, 2, 3, 4].concat(@cls[]))
+    assert_equal(@cls[],               @cls[].concat(@cls[]))
+    assert_equal(@cls[@cls[1, 2], @cls[3, 4]], @cls[@cls[1, 2]].concat(@cls[@cls[3, 4]]))
     
-    # assert_equal(@cls[1, 2, 3, 4],     @cls[1, 2].concat(@cls[3, 4]))
-    # assert_equal(@cls[1, 2, 3, 4],     @cls[].concat(@cls[1, 2, 3, 4]))
-    # assert_equal(@cls[1, 2, 3, 4],     @cls[1, 2, 3, 4].concat(@cls[]))
-    # assert_equal(@cls[],               @cls[].concat(@cls[]))
-    # assert_equal(@cls[@cls[1, 2], @cls[3, 4]], @cls[@cls[1, 2]].concat(@cls[@cls[3, 4]]))
-    # 
-    # a = @cls[1, 2, 3]
-    # a.concat(a)
-    # assert_equal([1, 2, 3, 1, 2, 3], a)
+    a = @cls[1, 2, 3]
+    a.concat(a)
+    assert_equal([1, 2, 3, 1, 2, 3], a)
   end
   
   def test_eql?
