@@ -29,6 +29,7 @@ acceptable performance.
 
 * only a limited set of array methods are currently supported
 * currently only [] and []= are fully tested vs RubySpec
+* documentation is patchy
 
 Note also that YAML dump/load of some objects doesn't work or doesn't
 reproduce the object; such objects will not be properly stored in an

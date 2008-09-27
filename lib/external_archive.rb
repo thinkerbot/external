@@ -24,7 +24,7 @@ require 'external_index'
 #++
 
 # ExternalArchive provides array-like access to archival data stored on disk.
-# ExternalArchives consist of an IO object and an index of [position, length]
+# ExternalArchives consist of an IO object and an index of [start, length]
 # pairs which indicate the start position and length of entries in the IO.
 # 
 class ExternalArchive < External::Base

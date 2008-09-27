@@ -175,11 +175,8 @@ module External
       obj == nil ? [] : obj.respond_to?(:to_ary) ? obj.to_ary : [obj]
     end
     
-    # splits the range into a [start, length, total]
-    # array, where total is the length of self.
-    def split_range(range) # :nodoc:
-      total = length
-      
+    # a more array-compliant version of Chunkable#split_range
+    def split_range(range, total=length) # :nodoc:
       # split the range
       start = convert_to_int(range.begin)
       raise TypeError, "can't convert #{range.begin.class} into Integer" unless start.kind_of?(Integer)
@@ -192,7 +189,7 @@ module External
       length = finish - start
       length -= 1 if range.exclude_end?
       
-      [start, length, total]
+      [start, length]
     end
     
     # helper to inspect large arrays

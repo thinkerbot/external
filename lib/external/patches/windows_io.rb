@@ -1,5 +1,12 @@
 module External
   module Patches
+    
+    # Ruby on Windows has problems with files larger than ~2 gigabytes.
+    # Sizes return as negative, and positions cannot be set beyond the max
+    # size of a long (2147483647 ~ 2GB = 2475636895).  WindowsIo corrects 
+    # both of these issues thanks in large part to a bit of code taken from 
+    # 'win32/file/stat' (http://rubyforge.org/projects/win32utils/).
+    #
     module WindowsIo
       POSITION_MAX = 2147483647  # maximum size of long
       

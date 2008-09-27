@@ -337,7 +337,8 @@ class ExternalIndex < External::Base
       
     when Range
       raise TypeError, "can't convert Range into Integer" unless two == nil
-      start, length, total = split_range(one)
+      total = length
+      start, length = split_range(one, total)
 
       # (identical to those above...)
       return nil if start < 0 || start > total

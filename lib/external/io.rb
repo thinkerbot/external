@@ -7,40 +7,13 @@ autoload(:FileUtils, 'fileutils')
 
 module External
   
-  # Position gets IO objects to work properly for large files.  Additionally, 
-  # IO adds a length accessor for getting the size of the IO contents.  Note
-  # that length is not automatically adjusted by write, for performance
+  # Adds functionality to an IO required by External. 
+  #
+  # IO adds/overrides the length accessor for getting the size of the IO contents.  
+  # Note that length is not automatically adjusted by write, for performance
   # reasons.  length must be managed manually, or reset after writes using
   # reset_length.
   #
-  # A variety of bugs needed to be addressed per-platform:
-  #
-  # == Mac OS X Tiger
-  #
-  # Using the default (broken) installation of Ruby, StringIO does not correctly
-  # position itself when a pos= statement is issued.
-  #
-  #   s = StringIO.new "abc"
-  #   s.read    # => "abc"
-  #   s.pos = 0
-  #   s.read    # => nil
-  #
-  # For regular IO objects, as expected, the second read statement returns
-  # "abc".  Install the a fixed version of Ruby, perhaps with the one-click
-  # installer: http://rubyosx.rubyforge.org/
-  #
-  # == Windows
-  #
-  # Ruby on Windows has problems with files larger than ~2 gigabytes.
-  # Sizes return as negative, and positions cannot be set beyond the max
-  # size of a long (2147483647 ~ 2GB = 2475636895).  IO corrects both of 
-  # these issues thanks in large part to a bit of code taken from 
-  # 'win32/file/stat' (http://rubyforge.org/projects/win32utils/).
-  #
-  # == Others
-  #
-  # I haven't found errors on Fedora and haven't tested on any other platforms.
-  # If you find and solve some wierd positioning errors, please let me know. 
   module Io
     include Chunkable
     

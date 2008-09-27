@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name = "external"
-	s.version = "0.8.0"
+	s.version = "0.3.0"
 	s.author = "Simon Chiang"
 	s.email = "simon.a.chiang@gmail.com"
 	s.homepage = "http://rubyforge.org/projects/external/"
@@ -17,6 +17,7 @@ Gem::Specification.new do |s|
   s.extra_rdoc_files = %W{
     MIT-LICENSE
     README
+    History
   }
   
   # list the files you want to include here. you can

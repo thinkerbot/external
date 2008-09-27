@@ -348,6 +348,7 @@ class ExternalArchiveTest < Test::Unit::TestCase
       yield(str, extarc.io_index.to_a) if block_given?
       
       assert_equal arr, extarc.to_a
+      assert_equal arr.length, extarc.length
     end
   end
   
