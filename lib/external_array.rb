@@ -39,7 +39,7 @@ class ExternalArray < ExternalArchive
   
   def reindex(&block)
     reindex_by_sep(nil, 
-      :sep_regexp => /\n-{3} /, 
+      :sep_regexp => /^-{3} /, 
       :sep_length => 4, 
       :entry_follows_sep => true,
       &block)

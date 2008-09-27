@@ -4,14 +4,17 @@ Indexing and array-like access to data stored on disk rather than in memory.
 
 == Description
 
-External provides a way to index and access entries directly from a file without
-loading it into memory.  The indexes can be read into memory for performance or
-stored on disk alongside the data file, in essence giving you arbitrarily large
-arrays.  External provides access to the following:
+External provides a way to index and access array data directly from a file
+without loading it into memory.  Indexes may be cached in memory or stored 
+on disk with the data file, in essence giving you arbitrarily large arrays.
+Externals automatically chunk and buffer methods like <tt>each</tt> so that
+the memory footprint remains low even during enumeration.  
 
-ExternalIndex:: formatted binary data
-ExternalArchive:: externally stored string data
-ExternalArray:: externally stored ruby objects, serialized as YAML
+The main External classes are:
+
+* ExternalIndex   --  for formatted binary data
+* ExternalArchive --  for string data
+* ExternalArray   --  for objects (serialized as YAML)
 
 The array-like behavior of these classes is developed using modified versions
 of the RubySpec[http://rubyspec.org] specification for Array.  The idea is to 
@@ -22,23 +25,31 @@ acceptable performance.
 * Lighthouse[http://bahuvrihi.lighthouseapp.com/projects/10590-external]
 * Github[http://github.com/bahuvrihi/external/tree/master]
 
-=== Bugs/Known Issues
+==== Bugs/Known Issues
 
 * only a limited set of array methods are currently supported
-* YAML dump/load of some strings doesn't faithfully reproduce the input and
-  will not be faithfully stored in ExternalArray.  Carriage returns (\r) and
-  chains of newlines (\n) are notable:
+* currently only [] and []= are fully tested vs RubySpec
 
-  YAML.load(YAML.dump("\r"))                       # => nil
-  YAML.load(YAML.dump("\r\n"))                     # => ""
+Note also that YAML dump/load of some objects doesn't work or doesn't
+reproduce the object; such objects will not be properly stored in an
+ExternalArray.  Problematic objects include:
+
+Proc and Class:
+
+  block = lambda {}
+  YAML.load(YAML.dump(block))         # !> TypeError: allocator undefined for Proc
+  YAML.dump(Object)                   # !> TypeError: can't dump anonymous class Class
+
+Carriage returns ("\r"):
+
+  YAML.load(YAML.dump("\r"))          # => nil
+  YAML.load(YAML.dump("\r\n"))        # => ""
   YAML.load(YAML.dump("string with \r\n inside"))  # => "string with \n inside"
 
-  YAML.load(YAML.dump("\n"))                       # => ""
-  YAML.load(YAML.dump("\n\n"))                     # => ""
+Chains of newlines ("\n"):
 
---
-* reindexing of ExternalArray does not work for arrays containing yaml strings
-++
+  YAML.load(YAML.dump("\n"))          # => ""
+  YAML.load(YAML.dump("\n\n"))        # => ""
 
 == Usage
 
@@ -47,65 +58,68 @@ acceptable performance.
 ExternalArray can be initialized from data using the [] operator and used like
 an array.
 
-  a = ExternalArray[1, 2.2, "cat", {:key => 'value'}]
-  a[2]                # => "cat"
-  a.last              # => {:key => 'value'}
-  a << [:a, :b]
-  a.to_a              # => [1, 2.2, "cat", {:key => 'value'}, [:a, :b]]
+  a = ExternalArray['str', {'key' => 'value'}]
+  a[0]                                # => 'str'
+  a.last                              # => {'key' => 'value'}
+  a << [1,2]; a.to_a                  # => ['str', {'key' => 'value'}, [1,2]]
 
-ExternalArray serializes and stores entries on a data source (io) and builds an 
-io_index that tracks where each entry begins and ends.  By default ExternalArray
-will serialize to a StringIO and use an Array as the io_index:
+ExternalArray serializes and stores entries to an io while building an io_index
+that tracks the start and length of each entry.  By default ExternalArray
+will serialize to a Tempfile and use an Array as the io_index:
 
-  a.io.class            # => StringIO
-  a.io.string           # => "--- 1\n--- 2.2\n--- cat\n--- \n:key: value\n--- \n- :a\n- :b\n"
+  a.io.class                          # => Tempfile
+  a.io.rewind; a.io.read              # => "--- str\n--- \nkey: value\n--- \n- 1\n- 2\n"
+  a.io_index.class                    # => Array
+  a.io_index.to_a                     # => [[0, 8], [8, 16], [24, 13]]
 
-  a.io_index.class      # => Array
-  a.io_index.to_a       # => [[0, 6], [6, 8], [14, 8], [22, 17], [39, 15]]
-
-To save this data to disk, provide a path to <tt>close</tt>; a data file and
-binary index file will be created:
+To save this data more permanently, provide a path to <tt>close</tt>; the tempfile
+is moved to the path and a binary index file will be created:
 
   a.close('example.yml')
-  File.read('example.yml')                  # => "--- 1\n--- 2.2\n--- cat\n--- \n:key: value\n--- \n- :a\n- :b\n"
-  File.read('example.index').unpack('I*')   # => [0, 6, 6, 8, 14, 8, 22, 17, 39, 15]
+  File.read('example.yml')            # => "--- str\n--- \nkey: value\n--- \n- 1\n- 2\n"
+  
+  index = File.read('example.index')
+  index.unpack('I*')                  # => [0, 8, 8, 16, 24, 13]
 
-ExternalArray can be initialized from existing data sources.  When an index file
-already exists, <tt>open</tt> will use it automatically:
+ExternalArray provides <tt>open</tt> to create ExternalArrays from an existing 
+file; the instance will use an index file if it exists, or automatically reindex
+the data if it does not.  Manual calls to reindex may be necessary when you
+initialize an ExternalArray with <tt>new</tt> instead of <tt>open</tt>:
 
+  # use of an existing index file
   ExternalArray.open('example.yml') do |b|
-    b.to_a              # => [1, 2.2, "cat", {:key => 'value'}, [:a, :b]]
+    b.io_index.io.class               # => File
+    File.basename(b.io_index.io.path) # => 'example.index'
+    b.to_a                            # => ['str', {'key' => 'value'}, [1,2]]
   end
 
-If the index doesn't exist, tt>open</tt> will reindex the data automatically;
-manual intervention may be necessary when you initialize an ExternalArray
-with some arbitrary IO:
-
+  # automatic reindexing
   FileUtils.rm('example.index')
   ExternalArray.open('example.yml') do |b|
-    b.to_a              # => [1, 2.2, "cat", {:key => 'value'}, [:a, :b]]
+    b.io_index.io.class               # => Tempfile
+    b.to_a                            # => ['str', {'key' => 'value'}, [1,2]]
   end
   
-  c = ExternalArray.new File.open('example.yml')
-  c.to_a                # => []
+  # manual reindexing
+  file = File.open('example.yml')
+  c = ExternalArray.new(file)
   
+  c.to_a                              # => []
   c.reindex
-  c.to_a                # => [1, 2.2, "cat", {:key => 'value'}, [:a, :b]]
+  c.to_a                              # => ['str', {'key' => 'value'}, [1,2]]
 
 === ExternalArchive
 
-ExternalArchive is like ExternalArray except that it only handles strings (in fact,
-ExternalArray is a subclass of ExternalArchive which adds the YAML serialization
-of the the string).  
+ExternalArchive is exactly like ExternalArray except that it only stores
+strings (ExternalArray is actually a subclass of ExternalArchive which
+dumps/loads strings).
 
   arc = ExternalArchive["swift", "brown", "fox"]
-  arc[2]                # => "fox"
-  arc.to_a              # => ["swift", "brown", "fox"]
+  arc[2]                              # => "fox"
+  arc.to_a                            # => ["swift", "brown", "fox"]
+  arc.io.rewind; arc.io.read          # => "swiftbrownfox"
 
-  arc.io.class          # => StringIO
-  arc.io.string         # => "swiftbrownfox"
-
-ExternalArchives are primarily useful as a baseclass for accessing archival data.
+ExternalArchive is useful as a base for classes to access archival data.
 Here is a simple parser for FASTA[http://en.wikipedia.org/wiki/Fasta_format]
 data:
 
@@ -139,25 +153,25 @@ data:
   fasta = FastaArchive.new open('http://external.rubyforge.org/doc/tiny_fasta.txt')
   fasta.reindex
   
-  fasta.length        # => 5
-  fasta[1].header     # => ">gi|114329651|ref|YP_740470.1| photosystem II protein D2 [Citrus sinensis]"
-  fasta[0].body       # => ["MEVNILAFIATTLFVLVPTAFLLIIYVKTVSQSD"]
+  fasta.length                        # => 5
+  fasta[0].body                       # => ["MEVNILAFIATTLFVLVPTAFLLIIYVKTVSQSD"]
 
-The tiny_fasta.txt file is 5 FASTA entries weighing in at 4KB; the non-redundant
-{NCBI protein database}[ftp://ftp.ncbi.nih.gov/blast/db/FASTA/] contains greater
-than 7 million entries in a 3.56 GB file.
+The non-redundant {NCBI protein database}[ftp://ftp.ncbi.nih.gov/blast/db/FASTA/]
+contains greater than 7 million FASTA entries in a 3.56 GB file; ExternalArchive
+is targeted at files that size, where lazy loading of data and a small memory 
+footprint are critical.
 
 === ExternalIndex
 
 ExternalIndex provides array-like access to formatted binary data.  The index of an 
-ExternalArray (when accessing a file) is an ExternalIndex configured for binary 
-data like 'II'; two integers corresponding to the start position and length an entry.
+uncached ExternalArray is an ExternalIndex configured for binary data like 'II'; two
+integers corresponding to the start position and length an entry.
 
   index = ExternalIndex[1, 2, 3, 4, 5, 6, {:format => 'II'}]
-  index.format          # => 'I*'
-  index.frame           # => 2
-  index[1]              # => [3,4]
-  index.to_a            # => [[1,2], [3,4], [5,6]]
+  index.format                        # => 'I*'
+  index.frame                         # => 2
+  index[1]                            # => [3,4]
+  index.to_a                          # => [[1,2], [3,4], [5,6]]
 
 ExternalIndex handles arbitrary packing formats, opening many possibilities:
 
@@ -168,8 +182,8 @@ ExternalIndex handles arbitrary packing formats, opening many possibilities:
     file.flush
 
     index = ExternalIndex.new(file, :format => "IQS")
-    index[1]          # => [4,5,6]
-    index.to_a        # => [[1,2,3], [4,5,6], [7,8,9]]
+    index[1]                          # => [4,5,6]
+    index.to_a                        # => [[1,2,3], [4,5,6], [7,8,9]]
   end
 
 == Installation

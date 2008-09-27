@@ -4,40 +4,72 @@ require 'external'
 class ReadmeTest < Test::Unit::TestCase
   acts_as_file_test
   
-  def test_external_array_readme_documentation
-    a = ExternalArray[1, 2.2, "cat", {:key => 'value'}]
-    assert_equal "cat", a[2]
-    assert_equal({:key => 'value'}, a.last)
-    a << [:a, :b]
-    assert_equal [1, 2.2, "cat", {:key => 'value'}, [:a, :b]], a.to_a
+  #
+  # YAML issues
+  #
+  
+  def test_yaml_issues_documentation
+    block = lambda {}
+    assert_raise(TypeError) { YAML.load(YAML.dump(block)) }
+    assert_raise(TypeError) { YAML.dump(Object) }
 
-    assert_equal StringIO, a.io.class
-    assert_equal "--- 1\n--- 2.2\n--- cat\n--- \n:key: value\n--- \n- :a\n- :b\n", a.io.string
+    assert_equal nil, YAML.load(YAML.dump("\r"))
+    assert_equal "", YAML.load(YAML.dump("\r\n"))
+    assert_equal "string with \n inside", YAML.load(YAML.dump("string with \r\n inside")) 
+
+    assert_equal "", YAML.load(YAML.dump("\n"))
+    assert_equal "",YAML.load(YAML.dump("\n\n"))
+  end
+  
+  #
+  # ExternalArray usage
+  #
+  
+  def test_external_array_readme_documentation
+    a = ExternalArray['str', {'key' => 'value'}]
+    assert_equal "str", a[0]
+    assert_equal({'key' => 'value'}, a.last)
+    a << [1,2]
+    assert_equal ['str', {'key' => 'value'}, [1,2]], a.to_a
+
+    condition_test(:ruby_1_8) { assert_equal Tempfile, a.io.class }
+    condition_test(:ruby_1_9) { assert_equal File, a.io.class }
+    
+    a.io.rewind
+    assert_equal "--- str\n--- \nkey: value\n--- \n- 1\n- 2\n", a.io.read
 
     assert_equal Array, a.io_index.class
-    assert_equal [[0, 6], [6, 8], [14, 8], [22, 17], [39, 15]], a.io_index.to_a
+    assert_equal [[0, 8], [8, 16], [24, 13]], a.io_index.to_a
 
     example = method_tempfile('example.yml')
     index = example.chomp(".yml") + ".index"
     a.close(example)
-    assert_equal "--- 1\n--- 2.2\n--- cat\n--- \n:key: value\n--- \n- :a\n- :b\n", File.read(example) 
-    assert_equal [0, 6, 6, 8, 14, 8, 22, 17, 39, 15], File.read(index).unpack('I*')
+    assert_equal "--- str\n--- \nkey: value\n--- \n- 1\n- 2\n", File.read(example) 
+    assert_equal [0, 8, 8, 16, 24, 13], File.read(index).unpack('I*')
 
     ExternalArray.open(example) do |b|
-      assert_equal [1, 2.2, "cat", {:key => 'value'}, [:a, :b]], b.to_a
+      assert_equal File, b.io_index.io.class
+      assert_equal File.basename(index), File.basename(b.io_index.io.path)
+      assert_equal ['str', {'key' => 'value'}, [1,2]], b.to_a
     end
 
     FileUtils.rm(index)
     ExternalArray.open(example) do |b|
-      assert_equal [1, 2.2, "cat", {:key => 'value'}, [:a, :b]], b.to_a
+      condition_test(:ruby_1_8) { assert_equal Tempfile, b.io_index.io.class }
+      condition_test(:ruby_1_9) { assert_equal File, b.io_index.io.class }
+      assert_equal ['str', {'key' => 'value'}, [1,2]], b.to_a
     end
     
     c = ExternalArray.new File.open(example)
     assert_equal [], c.to_a
 
     c.reindex
-    assert_equal [1, 2.2, "cat", {:key => 'value'}, [:a, :b]], c.to_a
+    assert_equal ['str', {'key' => 'value'}, [1,2]], c.to_a
   end
+  
+  #
+  # ExternalArchive usage
+  #
   
   class FastaEntry
     attr_reader :header, :body
@@ -62,8 +94,8 @@ class ReadmeTest < Test::Unit::TestCase
     assert_equal "fox", arc[2]
     assert_equal ["swift", "brown", "fox"], arc.to_a
 
-    assert_equal StringIO, arc.io.class
-    assert_equal "swiftbrownfox", arc.io.string
+    arc.io.rewind
+    assert_equal "swiftbrownfox", arc.io.read
     
     fasta = FastaArchive.new File.open(File.dirname(__FILE__) + '/../docs/tiny_fasta.txt')
     fasta.reindex
@@ -72,6 +104,10 @@ class ReadmeTest < Test::Unit::TestCase
     assert_equal ">gi|114329651|ref|YP_740470.1| photosystem II protein D2 [Citrus sinensis]", fasta[1].header
     assert_equal ["MEVNILAFIATTLFVLVPTAFLLIIYVKTVSQSD"], fasta[0].body
   end
+  
+  #
+  # ExternalIndex usage
+  #
   
   def test_external_index_readme_documentation
     index = ExternalIndex[1, 2, 3, 4, 5, 6, {:format => 'II'}]

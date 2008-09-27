@@ -55,8 +55,6 @@ class ExternalArrayTest < Test::Unit::TestCase
   
   def test_initialize
     ea = ExternalArray.new
-      
-    assert_equal StringIO, ea.io.class
     assert_equal "", ea.io.read
     assert_equal [], ea.io_index.to_a
   end

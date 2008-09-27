@@ -10,8 +10,8 @@ require 'external/io'
 
 module External
   
-  # Base provides a basic IO interface used by ExternalArchive, ExternalArray, 
-  # and ExternalIndex.
+  # Base provides shared IO and Array-like methods used by ExternalArchive, 
+  # ExternalArray, and ExternalIndex.
   class Base
     class << self
       
@@ -21,7 +21,8 @@ module External
       # the new instance.  
       #
       # Nil may be provided as an fd, in which case a Tempfile will be
-      # used (and mode gets ignored).
+      # used (in which case mode gets ignored as Tempfiles always open
+      # in 'r+' mode).
       def open(fd=nil, mode="rb", *argv)
         fd = File.open(fd, mode) unless fd == nil
         base = self.new(fd, *argv)
@@ -44,12 +45,17 @@ module External
     # The underlying io for self.
     attr_reader :io
     
-    # Creates a new instance of self with the specified io.  
-    # A nil or string io will be converted into a StringIO.
+    # The default tempfile basename for Base instances
+    # initialized without an io.
+    TEMPFILE_BASENAME = "external_base"
+    
+    # Creates a new instance of self with the specified io. A
+    # nil io causes initialization with a Tempfile; a string
+    # io will be converted into a StringIO.
     def initialize(io=nil)
       self.io = case io
-      when nil, String 
-        StringIO.new(io.to_s)
+      when nil then Tempfile.new(TEMPFILE_BASENAME)
+      when String then StringIO.new(io)
       else io
       end
       
@@ -97,9 +103,9 @@ module External
       self
     end
     
-    #
-    #--
-    # VERY slow
+    # Returns a duplicate of self.  This can be a slow operation
+    # as it may involve copying the full contents of one large
+    # file to another.
     def dup
       flush
       another.concat(self)
@@ -152,7 +158,7 @@ module External
     protected
     
     # Sets io and extends the input io with Io.
-    def io=(io)
+    def io=(io) # :nodoc:
       io.extend Io unless io.kind_of?(Io)
       @io = io
     end
