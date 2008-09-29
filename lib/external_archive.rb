@@ -76,12 +76,18 @@ class ExternalArchive < External::Base
         FileUtils.touch(index) unless File.exists?(index)
       end
       
-      io_index = case index
-      when Array, ExternalIndex then index
-      else ExternalIndex.open(index, 'r+', :format => 'II')
+      begin
+        io = path == nil ? nil : File.open(path, mode)
+        io_index = case index
+        when Array, ExternalIndex then index
+        else ExternalIndex.open(index, 'r+', :format => 'II')
+        end
+      rescue(Errno::ENOENT)
+        io.close if io
+        io_index.close if io_index
+        raise
       end
       
-      io = path == nil ? nil : File.open(path, mode)
       extarc = new(io, io_index)
       
       # reindex if necessary

@@ -24,9 +24,14 @@ module External
       # used (in which case mode gets ignored as Tempfiles always open
       # in 'r+' mode).
       def open(path=nil, mode="rb", *argv)
-        path = File.open(path, mode) unless path == nil
-        base = new(path, *argv)
-        
+        begin
+          io = path == nil ? nil : File.open(path, mode) 
+          base = new(io, *argv)
+        rescue(Errno::ENOENT)
+          io.close if io
+          raise
+        end
+
         if block_given?
           begin
             yield(base)

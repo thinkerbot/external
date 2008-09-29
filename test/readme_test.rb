@@ -64,6 +64,7 @@ class ReadmeTest < Test::Unit::TestCase
 
     c.reindex
     assert_equal ['str', {'key' => 'value'}, [1,2]], c.to_a
+    c.close
   end
   
   #
