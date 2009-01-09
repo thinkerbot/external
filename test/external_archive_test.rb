@@ -24,7 +24,7 @@ class ExternalArchiveTest < Test::Unit::TestCase
   #
   
   def test_open_initializes_with_specified_file
-    input = method_tempfile("input.txt") {|file| file << STRING }
+    input = method_root.prepare(:tmp, "input.txt") {|file| file << STRING }
     ExternalArchive.open(input) do |extarc|
       assert_equal File, extarc.io.class
       assert_equal input, extarc.io.path
@@ -33,10 +33,10 @@ class ExternalArchiveTest < Test::Unit::TestCase
   end
   
   def test_open_initializes_with_specified_index
-    input = method_tempfile("input.txt") {|file| file << STRING }
-    index = method_tempfile("input.index") {|file| file << INDEX.flatten.pack('I*') }
+    input = method_root.prepare(:tmp, "input.txt") {|file| file << STRING }
+    index = method_root.prepare(:tmp, "alt.index") {|file| file << INDEX.flatten.pack('I*') }
     
-    assert_not_equal index, ExternalArchive.index_path(input) 
+    assert index != ExternalArchive.index_path(input) 
     ExternalArchive.open(input, 'r', :io_index => index) do |extarr|
       assert_equal ExternalIndex, extarr.io_index.class
       assert_equal index, extarr.io_index.io.path
@@ -53,7 +53,7 @@ class ExternalArchiveTest < Test::Unit::TestCase
   end
   
   def test_open_without_index_initializes_with_default_index_file_if_none_is_specified
-    input = method_tempfile("input.txt") {|file| file << STRING }
+    input = method_root.prepare(:tmp, "input.txt") {|file| file << STRING }
     index = ExternalArchive.index_path(input) 
     
     # first when the default index file doesn't exist
@@ -86,8 +86,8 @@ class ExternalArchiveTest < Test::Unit::TestCase
   end
   
   def test_open_does_not_call_reindex_extarr_is_not_empty
-    input = method_tempfile("input.txt") {|file| file << STRING }
-    index = method_tempfile("input.index") {|file| file << INDEX.flatten.pack('I*') }
+    input = method_root.prepare(:tmp, "input.txt") {|file| file << STRING }
+    index = method_root.prepare(:tmp, "input.index") {|file| file << INDEX.flatten.pack('I*') }
     
     ReindexArchive.open(input, 'r', :io_index => index) do |extarr|
       assert !extarr.reindex_called
@@ -95,8 +95,8 @@ class ExternalArchiveTest < Test::Unit::TestCase
   end
   
   def test_open_calls_reindex_if_reindex_is_specified
-    input = method_tempfile("input.txt") {|file| file << STRING }
-    index = method_tempfile("input.index") {|file| file << INDEX.flatten.pack('I*') }
+    input = method_root.prepare(:tmp, "input.txt") {|file| file << STRING }
+    index = method_root.prepare(:tmp, "input.index") {|file| file << INDEX.flatten.pack('I*') }
     
     ReindexArchive.open(input, 'r', :io_index => index, :reindex => true) do |extarr|
       assert extarr.reindex_called
@@ -104,7 +104,7 @@ class ExternalArchiveTest < Test::Unit::TestCase
   end
   
   def test_open_calls_reindex_if_extarr_is_empty_and_io_is_not
-    input = method_tempfile("input.txt") {|file| file << STRING }
+    input = method_root.prepare(:tmp, "input.txt") {|file| file << STRING }
     assert_equal STRING.length, File.size(input)
     
     ReindexArchive.open(input, 'r') do |extarr|
@@ -113,7 +113,7 @@ class ExternalArchiveTest < Test::Unit::TestCase
   end
   
   def test_open_does_not_call_reindex_if_extarr_io_is_empty
-    input = method_tempfile("input.txt") {}
+    input = method_root.prepare(:tmp, "input.txt") {}
     assert_equal 0, File.size(input)
     
     ReindexArchive.open(input, 'r') do |extarr|
@@ -122,22 +122,22 @@ class ExternalArchiveTest < Test::Unit::TestCase
   end
   
   def test_open_does_not_call_reindex_if_auto_reindex_is_false
-    input = method_tempfile("input.txt") {|file| file << STRING }
+    input = method_root.prepare(:tmp, "input.txt") {|file| file << STRING }
     ReindexArchive.open(input, 'r', :auto_reindex => false) do |extarr|
       assert !extarr.reindex_called
     end
   end
   
   def test_open_raises_error_if_path_doesnt_exists
-    input = method_tempfile("input.txt")
+    input = method_root.prepare(:tmp, "input.txt")
     
     assert !File.exists?(input)
     assert_raise(Errno::ENOENT) { ExternalArchive.open(input) }
   end
   
   def test_open_raises_error_if_specified_index_doesnt_exists
-    input = method_tempfile("input.txt") {}
-    index = method_tempfile("input.index")
+    input = method_root.prepare(:tmp, "input.txt") {}
+    index = method_root.prepare(:tmp, "input.index")
     
     assert File.exists?(input)
     assert !File.exists?(index)
@@ -217,8 +217,8 @@ class ExternalArchiveTest < Test::Unit::TestCase
     archive = ExternalArchive.new StringIO.new(data), ExternalIndex.new
     archive[0] = "abcde"
     
-    path = method_tempfile('path')
-    index_path = method_tempfile('index_path')
+    path = method_root.prepare(:tmp, 'path')
+    index_path = method_root.prepare(:tmp, 'index_path')
     
     assert !File.exists?(path)
     assert !File.exists?(index_path)
@@ -236,8 +236,8 @@ class ExternalArchiveTest < Test::Unit::TestCase
     archive = ExternalArchive.new StringIO.new(data), []
     archive[0] = "abcde"
     
-    path = method_tempfile('path')
-    index_path = method_tempfile('index_path')
+    path = method_root.prepare(:tmp, 'path')
+    index_path = method_root.prepare(:tmp, 'index_path')
     
     assert !File.exists?(path)
     assert !File.exists?(index_path)

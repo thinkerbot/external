@@ -43,7 +43,7 @@ class ReadmeTest < Test::Unit::TestCase
     assert_equal Array, a.io_index.class
     assert_equal [[0, 8], [8, 16], [24, 13]], a.io_index.to_a
 
-    example = method_tempfile('example.yml')
+    example = method_root.prepare(:tmp, 'example.yml')
     index = example.chomp(".yml") + ".index"
     a.close(example)
     assert_equal "--- str\n--- \nkey: value\n--- \n- 1\n- 2\n", File.read(example) 

@@ -7,13 +7,13 @@ class  IOTest < Test::Unit::TestCase
   acts_as_file_test
   
   def io_test(data="")
-    path = method_tempfile("file_test") {|tempfile| tempfile << data }
+    path = method_root.prepare(:tmp, "file_test") {|tempfile| tempfile << data }
     File.open(path, "r+") do |file|
       file.extend Io
       yield(:file, file)
     end
 
-    Tempfile.open("tempfile_test", method_root[:output]) do |tempfile|
+    Tempfile.open("tempfile_test", method_root[:tmp]) do |tempfile|
       tempfile << data
       tempfile.fsync
       tempfile.extend Io
@@ -142,7 +142,7 @@ class  IOTest < Test::Unit::TestCase
   #     "a" => "w",
   #     "a+" => "r+"
   #   }.each_pair do |mode, expected|
-  #     path = method_tempfile("file_test") {|tempfile| tempfile << '' }
+  #     path = method_root.prepare(:tmp, "file_test") {|tempfile| tempfile << '' }
   #     
   #     File.open(path, mode) do |file|
   #       file.extend Io

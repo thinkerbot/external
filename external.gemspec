@@ -7,11 +7,10 @@ Gem::Specification.new do |s|
   s.platform = Gem::Platform::RUBY
   s.summary = "array-like access to external data files"
   s.require_path = "lib"
-  #s.test_file = "test/tap_test_suite.rb"
   s.rubyforge_project = "external"
   s.has_rdoc = true
-  s.add_development_dependency("tap", "~> 0.10.7")
-  s.add_development_dependency("mspec", "~> 1.5.0")
+  s.add_development_dependency("tap", ">= 0.12.0")
+  s.add_development_dependency("mspec", "~> 1.5")
   
   # list extra rdoc files here.
   s.extra_rdoc_files = %W{

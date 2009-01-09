@@ -68,8 +68,8 @@ class BaseTest < Test::Unit::TestCase
   end
   
   def test_close_moves_File_io_to_path_if_specified
-    source = method_tempfile("source.txt")
-    target = method_tempfile("target.txt")
+    source = method_root.prepare(:tmp, "source.txt")
+    target = method_root.prepare(:tmp, "target.txt")
     assert !File.exists?(target)
     
     base = Base.new File.open(source, 'w')
@@ -83,7 +83,7 @@ class BaseTest < Test::Unit::TestCase
   
   def test_close_moves_Tempfile_to_path_if_specifed
     source = Tempfile.new("base")
-    target = method_tempfile("target.txt")
+    target = method_root.prepare(:tmp, "target.txt")
     assert !File.exists?(target)
     
     base = Base.new source
@@ -96,7 +96,7 @@ class BaseTest < Test::Unit::TestCase
   end
 
   def test_close_dumps_non_File_non_Tempfile_io_to_path_if_specifed
-    target = method_tempfile("target.txt")
+    target = method_root.prepare(:tmp, "target.txt")
     assert !File.exists?(target)
     
     base = Base.new StringIO.new("")
@@ -108,7 +108,7 @@ class BaseTest < Test::Unit::TestCase
   end
   
   def test_close_raises_error_if_target_exists
-    target = method_tempfile("target.txt") {|file| file << "existing content"}
+    target = method_root.prepare(:tmp, "target.txt") {|file| file << "existing content"}
     assert File.exists?(target)
     
     assert_raise(ArgumentError) { base.close(target) }
@@ -117,7 +117,7 @@ class BaseTest < Test::Unit::TestCase
   end
   
   def test_close_overwrites_existing_target_if_specified
-    target = method_tempfile("target.txt") {|file| file << "existing content"}
+    target = method_root.prepare(:tmp, "target.txt") {|file| file << "existing content"}
     assert File.exists?(target)
     
     base = Base.new
