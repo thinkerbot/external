@@ -1,4 +1,5 @@
 autoload(:Digest, 'digest/md5')
+require 'tap/tasks/file_task'
 
 # External::Rubyspec::Checkout::manifest checkout or update rubyspecs
 # 
@@ -20,7 +21,7 @@ autoload(:Digest, 'digest/md5')
 #
 module External
   module Rubyspec
-    class Checkout < Tap::FileTask
+    class Checkout < Tap::Tasks::FileTask
       
       # 'Copies' (see above for the copy format) the source to the 
       # target if the target doesn't exist or is out of date.  

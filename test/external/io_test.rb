@@ -12,6 +12,14 @@ class  IOTest < Test::Unit::TestCase
       file.extend Io
       yield(:file, file)
     end
+    
+    io_path = method_root.prepare(:tmp, "io_test") {|tempfile| tempfile << data }
+    File.open(io_path, "r+") do |file|
+      IO.open(file.fileno, "r+") do |io|
+        io.extend Io
+        yield(:io, io)
+      end
+    end
 
     Tempfile.open("tempfile_test", method_root[:tmp]) do |tempfile|
       tempfile << data
@@ -48,7 +56,7 @@ class  IOTest < Test::Unit::TestCase
       when StringIO 
         assert_equal 5, io.string.size, type
       else 
-        assert_equal 5, File.size(io.path), type
+        assert_equal 5, io.stat.size, type
       end
       
       assert_equal 0, io.length, type
@@ -295,8 +303,8 @@ class  IOTest < Test::Unit::TestCase
   def test_io_test
     classes = []
     io_test("some data") do |type, io|
-      # assert io.kind_of?(Io)
-      # assert "r+", io.generic_mode
+      assert io.kind_of?(Io)
+      assert "r+", io.generic_mode
       
       io.pos = 0
       assert_equal "some data", io.read
@@ -311,11 +319,11 @@ class  IOTest < Test::Unit::TestCase
     end
     
     condition_test(:ruby_1_8) do
-      assert_equal [File, Tempfile, StringIO], classes
+      assert_equal [File, IO, Tempfile, StringIO], classes
     end
     
     condition_test(:ruby_1_9) do
-      assert_equal [File, File, StringIO], classes
+      assert_equal [File, IO, File, StringIO], classes
     end
   end
   
@@ -325,7 +333,7 @@ class  IOTest < Test::Unit::TestCase
     io_test(data) do |type, io|
       copy_path = nil
       io.copy do |copy|
-        # assert_equal "r", copy.generic_mode
+        assert_equal "r", copy.generic_mode
         assert_equal data, copy.read
   
         copy_path =  copy.path

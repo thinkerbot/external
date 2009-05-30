@@ -1,3 +1,7 @@
+==
+
+* experimentally added IO as an accepted type in Utils
+
 == 0.3.0 / 2008-10-27
 
 Major update with refactoring (ex ExtArr is now ExternalArray) 

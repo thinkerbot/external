@@ -13,15 +13,15 @@ module External
     # Nested classes have '::' replaced by '_'. Thus to add support
     # for Some::Unknown::IO, extend External::IO as below:
     #
-    # module External::IO
-    # def some_unknown_io_mode(io)
-    # ...
-    # end
+    #   module External::IO
+    #     def some_unknown_io_mode(io)
+    #     ...
+    #     end
     #
-    # def some_unknown_io_length(io)
-    # ...
-    # end
-    # end
+    #     def some_unknown_io_length(io)
+    #     ...
+    #     end
+    #   end
     #
     # See stringio_mode and stringio_length for more details.
     def try_handle(io, method)
@@ -78,9 +78,9 @@ module External
       end
     end
     
-    # Returns an array of bools determining if the input File 
+    # Returns an array of bools determining if the input Io 
     # is readable and writable.
-    def file_mode(io)
+    def io_mode(io)
       begin
         dup = io.dup
         
@@ -104,10 +104,18 @@ module External
       end
     end
     
-    # Returns the length of the input File
-    def file_length(io)
+    # Returns the length of the input IO
+    def io_length(io)
       io.fsync
-      File.size(io.path)
+      io.stat.size
+    end
+    
+    def file_mode(io)
+      io_mode(io)
+    end
+    
+    def file_length(io)
+      io_length(io)
     end
     
     # Returns an array of bools determining if the input Tempfile 
