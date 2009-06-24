@@ -336,8 +336,11 @@ class  IOTest < Test::Unit::TestCase
         assert_equal "r", copy.generic_mode
         assert_equal data, copy.read
   
-        copy_path =  copy.path
-        assert_not_equal io.path, copy_path
+        copy_path = copy.path
+        
+        if io.respond_to?(:path)
+          assert io.path != copy_path
+        end
       end
   
       assert !copy_path.nil?
