@@ -1,5 +1,8 @@
-autoload(:Digest, 'digest/md5')
-require 'tap/tasks/file_task'
+
+# Toe::Manifest.task :manifest, :omit => [/rdoc|test|pkg|rubyspec/]
+
+# autoload(:Digest, 'digest/md5')
+# require 'tap/tasks/file_task'
 
 # External::Rubyspec::Checkout::manifest checkout or update rubyspecs
 # 
@@ -21,7 +24,7 @@ require 'tap/tasks/file_task'
 #
 module External
   module Rubyspec
-    class Checkout < Tap::Tasks::FileTask
+    class Checkout #< Tap::Tasks::FileTask
       
       # 'Copies' (see above for the copy format) the source to the 
       # target if the target doesn't exist or is out of date.  
