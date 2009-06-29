@@ -1,5 +1,5 @@
-
-# Toe::Manifest.task :manifest, :omit => [/rdoc|test|pkg|rubyspec/]
+require 'toe/manifest'
+Toe::Manifest.task :manifest, :omit => [/rdoc|test|pkg|rubyspec/]
 
 # autoload(:Digest, 'digest/md5')
 # require 'tap/tasks/file_task'

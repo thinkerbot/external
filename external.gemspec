@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name = "external"
-	s.version = "0.3.0"
+	s.version = "0.3.1"
 	s.author = "Simon Chiang"
 	s.email = "simon.a.chiang@gmail.com"
 	s.homepage = "http://rubyforge.org/projects/external/"
@@ -9,7 +9,7 @@ Gem::Specification.new do |s|
   s.require_path = "lib"
   s.rubyforge_project = "external"
   s.has_rdoc = true
-  s.add_development_dependency("tap", ">= 0.12.0")
+  s.add_development_dependency("tap", ">= 0.18.0")
   s.add_development_dependency("mspec", "~> 1.5")
   
   # list extra rdoc files here.
